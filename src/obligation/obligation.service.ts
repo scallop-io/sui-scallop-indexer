@@ -16,6 +16,7 @@ import {
 
 import { EventStateService } from '../eventstate/eventstate.service';
 import { EventState } from 'src/eventstate/eventstate.schema';
+import { delay } from 'src/common/utils/time';
 
 @Injectable()
 export class ObligationService {
@@ -139,12 +140,14 @@ export class ObligationService {
   async loopQueryEvents(): Promise<void> {
     const mnemonics = process.env.MNEMONICS;
     const network = <NetworkType>process.env.NETWORK;
-    const suiKit = new SuiKit({ mnemonics, networkType: network });
+    const fullNodeUrl = process.env.RPC_ENDPOINT ?? undefined;
+    const suiKit = new SuiKit({ mnemonics, networkType: network, fullnodeUrl: fullNodeUrl });
 
     // loop every interval secconds
     let hasCollateralsChanged = true;
     let hasDebtsChanged = true;
-    setInterval(async () => {
+
+    while(true) {
       const start = new Date().getTime();
       const changedObligationMap = new Map();
 
@@ -185,7 +188,10 @@ export class ObligationService {
       const end = new Date().getTime();
       const execTime = (end - start) / 1000;
       console.log(`=== loopQueryEvents exec Times: <${execTime}> seconds ===`);
-    }, Number(process.env.QUERY_INTERVAL_SECONDS) * 1000);
+      if (execTime < Number(process.env.QUERY_INTERVAL_SECONDS)) {
+        await delay((Number(process.env.QUERY_INTERVAL_SECONDS) - execTime) * 1000)
+      }
+    }
   }
 
   // update collaterals to obligation
@@ -546,7 +552,8 @@ export class ObligationService {
   async listenEvents(): Promise<void> {
     const mnemonics = process.env.MNEMONICS;
     const network = <NetworkType>process.env.NETWORK;
-    const suiKit = new SuiKit({ mnemonics, networkType: network });
+    const fullNodeUrl = process.env.RPC_ENDPOINT ?? undefined;
+    const suiKit = new SuiKit({ mnemonics, networkType: network, fullnodeUrl: fullNodeUrl });
     const owner = suiKit.currentAddress();
     console.log(`currentAddress:<${owner}>`);
 
