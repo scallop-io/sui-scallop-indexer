@@ -7,7 +7,7 @@ async function bootstrap() {
   const app = await NestFactory.createApplicationContext(AppModule);
   // application logic...
   const obligationService = app.get(ObligationService);
-  // obligationService.listenEvents();
-  obligationService.updateObligationsFromQueryEvents();
+  // await obligationService.listenEvents();
+  obligationService.loopQueryEvents();
 }
 bootstrap();

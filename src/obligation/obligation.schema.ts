@@ -11,8 +11,8 @@ export class Collateral {
   @Prop()
   amount: string;
 
-  @Prop()
-  timestampMs: string;
+  // @Prop()
+  // timestampMs?: string;
 }
 
 @Schema({ _id: false })
@@ -26,8 +26,8 @@ export class Debt {
   @Prop()
   borrowIndex: string;
 
-  @Prop()
-  timestampMs: string;
+  // @Prop()
+  // timestampMs: string;
 }
 
 @Schema({ _id: false })
@@ -90,17 +90,17 @@ export class Repay {
   timestamps: true,
 })
 export class Obligation {
-  @Prop({ default: '' })
-  obligation_id?: string;
+  @Prop({ required: true, index: true, unique: true })
+  obligation_id: string;
 
   @Prop()
-  obligation_key?: string;
+  obligation_key: string;
 
   @Prop()
   sender?: string;
 
   @Prop()
-  timestampMs: string;
+  timestampMs?: string;
 
   @Prop({ default: [] })
   collaterals?: Collateral[];
