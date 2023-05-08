@@ -108,12 +108,12 @@ export class ObligationService {
         console.log(`[${eventName}]: qurey from cursor[${cursorTxDigest}].`);
       }
 
-      latestEvent.data.forEach((element) => {
+      for (const element of latestEvent.data) {
         eventData.push(element);
 
         cursorTxDigest = element.id.txDigest;
         cursorEventSeq = element.id.eventSeq;
-      });
+      }
 
       hasNextPage = latestEvent.hasNextPage;
       if (hasNextPage === true) {
@@ -141,17 +141,27 @@ export class ObligationService {
     const mnemonics = process.env.MNEMONICS;
     const network = <NetworkType>process.env.NETWORK;
     const fullNodeUrl = process.env.RPC_ENDPOINT ?? undefined;
-    const suiKit = new SuiKit({ mnemonics, networkType: network, fullnodeUrl: fullNodeUrl });
+    const suiKit = new SuiKit({
+      mnemonics,
+      networkType: network,
+      fullnodeUrl: fullNodeUrl,
+    });
 
     // loop every interval secconds
-    let hasCollateralsChanged = true;
-    let hasDebtsChanged = true;
-
-    while(true) {
+    let hasCollateralsChanged = false;
+    let hasDebtsChanged = false;
+    while (true) {
       const start = new Date().getTime();
       const changedObligationMap = new Map();
 
-      await this.updateCreatedObliations(suiKit, changedObligationMap);
+      const obligations = await this.updateCreatedObliations(
+        suiKit,
+        changedObligationMap,
+      );
+      if (obligations.length > 0) {
+        hasCollateralsChanged = true;
+        hasDebtsChanged = true;
+      }
 
       const deposits = await this.updateDeposits(suiKit, changedObligationMap);
       if (deposits.length > 0) {
@@ -189,7 +199,52 @@ export class ObligationService {
       const execTime = (end - start) / 1000;
       console.log(`=== loopQueryEvents exec Times: <${execTime}> seconds ===`);
       if (execTime < Number(process.env.QUERY_INTERVAL_SECONDS)) {
-        await delay((Number(process.env.QUERY_INTERVAL_SECONDS) - execTime) * 1000)
+        await delay(
+          (Number(process.env.QUERY_INTERVAL_SECONDS) - execTime) * 1000,
+        );
+      }
+    }
+  }
+
+  async updateObligationFields(
+    suiKit: SuiKit,
+    fieldName: string,
+    obligationMap: Map<string, Obligation>,
+    processField: (
+      item: any,
+      fieldObjs: any,
+      obligation: Obligation,
+    ) => Promise<void>,
+  ): Promise<void> {
+    const keys = [...obligationMap.keys()];
+    const obligationObjs = await suiKit.getObjects(keys);
+
+    for (const obligationObj of obligationObjs) {
+      const parentId =
+        obligationObj.objectFields[fieldName].fields.table.fields.id.id;
+      const dynamicFields = await suiKit
+        .provider()
+        .getDynamicFields({ parentId });
+
+      const obligation = obligationMap.get(obligationObj.objectId);
+      for (const item of dynamicFields.data) {
+        const fieldObjs =
+          await suiKit.rpcProvider.provider.getDynamicFieldObject({
+            parentId: parentId,
+            name: {
+              type: item.name.type,
+              value: item.name.value,
+            },
+          });
+
+        await processField(item, fieldObjs, obligation);
+
+        obligationMap.set(obligation.obligation_id, obligation);
+        await this.findOneAndUpdateObligation(
+          obligation.obligation_id,
+          obligation,
+        );
+        console.log(`[${fieldName}]: update <${obligation.obligation_id}>`);
       }
     }
   }
@@ -199,52 +254,26 @@ export class ObligationService {
     suiKit: SuiKit,
     obligationMap: Map<string, Obligation>,
   ): Promise<void> {
-    const keys = [...obligationMap.keys()];
-    const obligationObjs = await suiKit.getObjects(keys);
-    obligationObjs.forEach(async (obligationObj) => {
-      const parentId =
-        obligationObj.objectFields.collaterals.fields.table.fields.id.id;
-      const dynamicFields = await suiKit
-        .provider()
-        .getDynamicFields({ parentId: parentId });
-
-      const obligation = obligationMap.get(obligationObj.objectId);
-      dynamicFields.data.forEach(async (item) => {
-        const fieldObjs =
-          await suiKit.rpcProvider.provider.getDynamicFieldObject({
-            parentId: parentId,
-            name: {
-              type: item.name.type,
-              value: item.name.value,
-            },
-          });
-
+    return this.updateObligationFields(
+      suiKit,
+      'collaterals',
+      obligationMap,
+      async (item, fieldObjs, obligation) => {
         let amount = '';
         if ('fields' in fieldObjs.data.content) {
           amount = fieldObjs.data.content.fields.value.fields.amount;
         }
-
         const collateral: Collateral = {
           asset: item.name.value.name,
           amount: amount,
         };
-
-        if (
-          obligation.collaterals === undefined ||
-          obligation.collaterals === null
-        ) {
-          obligation.collaterals = [];
-        }
-        if (!obligation.collaterals.includes(collateral)) {
-          obligation.collaterals.push(collateral);
-        }
-        this.findOneAndUpdateObligation(obligation.obligation_id, obligation);
-        obligationMap.set(obligation.obligation_id, obligation);
-        console.log(
-          `[Collaterals]: update <${obligation.obligation_id}>, collaterals[${obligation.collaterals.length}]`,
+        await this.updateObligationProperty(
+          obligation,
+          'collaterals',
+          collateral,
         );
-      });
-    });
+      },
+    );
   }
 
   // update debts to obligation
@@ -252,53 +281,68 @@ export class ObligationService {
     suiKit: SuiKit,
     obligationMap: Map<string, Obligation>,
   ): Promise<void> {
-    const keys = [...obligationMap.keys()];
-    const obligationObjs = await suiKit.getObjects(keys); // obligation obj
-    obligationObjs.forEach(async (obligationObj) => {
-      const parentId =
-        obligationObj.objectFields.debts.fields.table.fields.id.id;
-
-      const dynamicFields = await suiKit
-        .provider()
-        .getDynamicFields({ parentId: parentId });
-
-      const obligation = obligationMap.get(obligationObj.objectId);
-      dynamicFields.data.forEach(async (item) => {
-        const fieldObjs =
-          await suiKit.rpcProvider.provider.getDynamicFieldObject({
-            parentId: parentId,
-            name: {
-              type: item.name.type,
-              value: item.name.value,
-            },
-          });
-
+    return this.updateObligationFields(
+      suiKit,
+      'debts',
+      obligationMap,
+      async (item, fieldObjs, obligation) => {
         let amount = '';
         let borrowIdx = '';
         if ('fields' in fieldObjs.data.content) {
           amount = fieldObjs.data.content.fields.value.fields.amount;
           borrowIdx = fieldObjs.data.content.fields.value.fields.borrow_index;
         }
-
         const debt: Debt = {
           asset: item.name.value.name,
           amount: amount,
           borrowIndex: borrowIdx,
         };
+        await this.updateObligationProperty(obligation, 'debts', debt);
+      },
+    );
+  }
 
-        if (obligation.debts === undefined || obligation.debts === null) {
-          obligation.debts = [];
+  async updateFromEventData(
+    suiKit: SuiKit,
+    eventKey: string,
+    obligationMap: Map<string, Obligation>,
+    updateCallback: (item: any, obligation: Obligation) => Promise<void>,
+  ): Promise<any[]> {
+    try {
+      const eventData = await this.getEventData(suiKit, eventKey);
+
+      const eventName = eventKey.split('::')[2];
+      // eventData.forEach(async (item) => {
+      for (const item of eventData) {
+        let obligation = obligationMap.get(item.parsedJson.obligation);
+        if (obligation === undefined || !obligation) {
+          obligation = await this.findByObligation(item.parsedJson.obligation);
         }
-        if (!obligation.debts.includes(debt)) {
-          obligation.debts.push(debt);
+        if (!obligation) {
+          obligation = {
+            obligation_id: item.parsedJson.obligation,
+          } as Obligation;
         }
-        this.findOneAndUpdateObligation(obligation.obligation_id, obligation);
+
+        await updateCallback(item, obligation);
+
         obligationMap.set(obligation.obligation_id, obligation);
-        console.log(
-          `[Debts]: update <${obligation.obligation_id}>, debts[${obligation.debts.length}]`,
+        await this.findOneAndUpdateObligation(
+          obligation.obligation_id,
+          obligation,
         );
-      });
-    });
+        console.log(`[${eventName}]: update <${obligation.obligation_id}>`);
+        // console.log(obligationMap);
+      }
+
+      console.log(`[${eventName}]: update <${eventData.length}>`);
+      return eventData;
+    } catch (error) {
+      console.error(
+        `Error updating event data for ${eventKey}: ${error.message}`,
+      );
+      throw error;
+    }
   }
 
   // update created obligations
@@ -306,25 +350,31 @@ export class ObligationService {
     suiKit: SuiKit,
     obligationMap: Map<string, Obligation>,
   ): Promise<any[]> {
-    const createdData = await this.getEventData(
+    return await this.updateFromEventData(
       suiKit,
       process.env.EVENT_OBLIGATION_CREATED,
+      obligationMap,
+      async (item, obligation) => {
+        obligation.obligation_id = item.parsedJson.obligation;
+        obligation.obligation_key = item.parsedJson.obligation_key;
+        obligation.sender = item.parsedJson.sender;
+        obligation.timestampMs = item.timestampMs;
+      },
     );
+  }
 
-    const eventName = process.env.EVENT_OBLIGATION_CREATED.split('::')[2];
-    createdData.forEach((item) => {
-      const obligation: Obligation = {
-        obligation_id: item.parsedJson.obligation,
-        obligation_key: item.parsedJson.obligation_key,
-        sender: item.parsedJson.sender,
-        timestampMs: item.timestampMs,
-      };
-      this.findOneAndUpdateObligation(obligation.obligation_id, obligation);
-      obligationMap.set(obligation.obligation_id, obligation);
-      console.log(`[${eventName}]: update <${obligation.obligation_id}>`);
-    });
-    console.log(`[${eventName}]: update <${createdData.length}>`);
-    return createdData;
+  async updateObligationProperty(
+    obligation: Obligation,
+    property: string,
+    item: any,
+  ): Promise<Obligation> {
+    if (!obligation[property]) {
+      obligation[property] = [];
+    }
+    if (!obligation[property].includes(item)) {
+      obligation[property].push(item);
+    }
+    return obligation;
   }
 
   // update deposits to obligation
@@ -332,38 +382,19 @@ export class ObligationService {
     suiKit: SuiKit,
     obligationMap: Map<string, Obligation>,
   ): Promise<any[]> {
-    const depositData = await this.getEventData(
+    return await this.updateFromEventData(
       suiKit,
       process.env.EVENT_COLLATERAL_DEPOSIT,
+      obligationMap,
+      async (item, obligation) => {
+        const deposit: Deposit = {
+          asset: item.parsedJson.deposit_asset.name,
+          amount: item.parsedJson.deposit_amount,
+          timestampMs: item.timestampMs,
+        };
+        await this.updateObligationProperty(obligation, 'deposits', deposit);
+      },
     );
-
-    const eventName = process.env.EVENT_COLLATERAL_DEPOSIT.split('::')[2];
-    let obligation: Obligation;
-    depositData.forEach(async (item) => {
-      obligation = obligationMap.get(item.parsedJson.obligation);
-      if (obligation === undefined || !obligation) {
-        obligation = await this.findByObligation(item.parsedJson.obligation);
-      }
-
-      const deposit: Deposit = {
-        asset: item.parsedJson.deposit_asset.name,
-        amount: item.parsedJson.deposit_amount,
-        timestampMs: item.timestampMs,
-      };
-
-      if (obligation.deposits === undefined || obligation.deposits === null) {
-        obligation.deposits = [];
-      }
-      if (!obligation.deposits.includes(deposit)) {
-        obligation.deposits.push(deposit);
-      }
-      this.findOneAndUpdateObligation(obligation.obligation_id, obligation);
-      obligationMap.set(obligation.obligation_id, obligation);
-      console.log(`[${eventName}]: update <${obligation.obligation_id}>`);
-    });
-
-    console.log(`[${eventName}]: update <${depositData.length}>`);
-    return depositData;
   }
 
   // update withdraw to obligation
@@ -371,36 +402,19 @@ export class ObligationService {
     suiKit: SuiKit,
     obligationMap: Map<string, Obligation>,
   ): Promise<any[]> {
-    const withdrawData = await this.getEventData(
+    return await this.updateFromEventData(
       suiKit,
       process.env.EVENT_COLLATERAL_WITHDRAW,
+      obligationMap,
+      async (item, obligation) => {
+        const withdraw: Withdraw = {
+          asset: item.parsedJson.withdraw_asset.name,
+          amount: item.parsedJson.withdraw_amount,
+          timestampMs: item.timestampMs,
+        };
+        await this.updateObligationProperty(obligation, 'withdraws', withdraw);
+      },
     );
-
-    const eventName = process.env.EVENT_COLLATERAL_WITHDRAW.split('::')[2];
-    let obligation: Obligation;
-    withdrawData.forEach(async (item) => {
-      obligation = obligationMap.get(item.parsedJson.obligation);
-      if (obligation === undefined || !obligation) {
-        obligation = await this.findByObligation(item.parsedJson.obligation);
-      }
-      const withdraw: Withdraw = {
-        asset: item.parsedJson.withdraw_asset.name,
-        amount: item.parsedJson.withdraw_amount,
-        timestampMs: item.timestampMs,
-      };
-
-      if (obligation.withdraws === undefined || obligation.withdraws === null) {
-        obligation.withdraws = [];
-      }
-      if (!obligation.withdraws.includes(withdraw)) {
-        obligation.withdraws.push(withdraw);
-      }
-      this.findOneAndUpdateObligation(obligation.obligation_id, obligation);
-      obligationMap.set(obligation.obligation_id, obligation);
-      console.log(`[${eventName}]: update <${obligation.obligation_id}>`);
-    });
-    console.log(`[${eventName}]: update <${withdrawData.length}>`);
-    return withdrawData;
   }
 
   // update borrow to obligation
@@ -408,35 +422,20 @@ export class ObligationService {
     suiKit: SuiKit,
     obligationMap: Map<string, Obligation>,
   ): Promise<any[]> {
-    const borrowData = await this.getEventData(
+    return await this.updateFromEventData(
       suiKit,
       process.env.EVENT_BORROW,
-    );
-    const eventName = process.env.EVENT_BORROW.split('::')[2];
-    let obligation: Obligation;
-    borrowData.forEach(async (item) => {
-      obligation = obligationMap.get(item.parsedJson.obligation);
-      if (obligation === undefined || !obligation) {
-        obligation = await this.findByObligation(item.parsedJson.obligation);
-      }
-      const borrow: Borrow = {
-        asset: item.parsedJson.asset.name,
-        amount: item.parsedJson.amount,
-        timestampMs: item.timestampMs,
-      };
+      obligationMap,
+      async (item, obligation) => {
+        const borrow: Borrow = {
+          asset: item.parsedJson.asset.name,
+          amount: item.parsedJson.amount,
+          timestampMs: item.timestampMs,
+        };
 
-      if (obligation.borrows === undefined || obligation.borrows === null) {
-        obligation.borrows = [];
-      }
-      if (!obligation.borrows.includes(borrow)) {
-        obligation.borrows.push(borrow);
-      }
-      this.findOneAndUpdateObligation(obligation.obligation_id, obligation);
-      obligationMap.set(obligation.obligation_id, obligation);
-      console.log(`[${eventName}]: update <${obligation.obligation_id}>`);
-    });
-    console.log(`[${eventName}]: update <${borrowData.length}>`);
-    return borrowData;
+        await this.updateObligationProperty(obligation, 'borrows', borrow);
+      },
+    );
   }
 
   // update repay to obligation
@@ -444,33 +443,20 @@ export class ObligationService {
     suiKit: SuiKit,
     obligationMap: Map<string, Obligation>,
   ): Promise<any[]> {
-    const repayData = await this.getEventData(suiKit, process.env.EVENT_REPAY);
+    return await this.updateFromEventData(
+      suiKit,
+      process.env.EVENT_REPAY,
+      obligationMap,
+      async (item, obligation) => {
+        const repay: Repay = {
+          asset: item.parsedJson.asset.name,
+          amount: item.parsedJson.amount,
+          timestampMs: item.timestampMs,
+        };
 
-    const eventName = process.env.EVENT_REPAY.split('::')[2];
-    let obligation: Obligation;
-    repayData.forEach(async (item) => {
-      obligation = obligationMap.get(item.parsedJson.obligation);
-      if (obligation === undefined || !obligation) {
-        obligation = await this.findByObligation(item.parsedJson.obligation);
-      }
-      const repay: Repay = {
-        asset: item.parsedJson.asset.name,
-        amount: item.parsedJson.amount,
-        timestampMs: item.timestampMs,
-      };
-
-      if (obligation.repays === undefined || obligation.repays === null) {
-        obligation.repays = [];
-      }
-      if (!obligation.repays.includes(repay)) {
-        obligation.repays.push(repay);
-      }
-      this.findOneAndUpdateObligation(obligation.obligation_id, obligation);
-      obligationMap.set(obligation.obligation_id, obligation);
-      console.log(`[${eventName}]: update <${obligation.obligation_id}>`);
-    });
-    console.log(`[${eventName}]: update <${repayData.length}>`);
-    return repayData;
+        await this.updateObligationProperty(obligation, 'repays', repay);
+      },
+    );
   }
 
   // subscribe protocol::open_obligation::ObligationCreatedEvent
@@ -553,7 +539,11 @@ export class ObligationService {
     const mnemonics = process.env.MNEMONICS;
     const network = <NetworkType>process.env.NETWORK;
     const fullNodeUrl = process.env.RPC_ENDPOINT ?? undefined;
-    const suiKit = new SuiKit({ mnemonics, networkType: network, fullnodeUrl: fullNodeUrl });
+    const suiKit = new SuiKit({
+      mnemonics,
+      networkType: network,
+      fullnodeUrl: fullNodeUrl,
+    });
     const owner = suiKit.currentAddress();
     console.log(`currentAddress:<${owner}>`);
 
