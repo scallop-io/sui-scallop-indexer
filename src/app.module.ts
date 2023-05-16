@@ -1,8 +1,14 @@
 import { Module } from '@nestjs/common';
-// import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ObligationModule } from './obligation/obligation.module';
+import { DepositModule } from './deposit/deposit.module';
+import { SuiModule } from './sui/sui.module';
+import { WithdrawModule } from './withdraw/withdraw.module';
+import { BorrowModule } from './borrow/borrow.module';
+import { RepayModule } from './repay/repay.module';
+import { CollateralModule } from './collateral/collateral.module';
+import { DebtModule } from './debt/debt.module';
 import * as process from 'process';
 import * as dotenv from 'dotenv';
 
@@ -13,7 +19,14 @@ dotenv.config();
     MongooseModule.forRoot(
       process.env.MONGO_URI || 'mongodb://localhost:27017/Scallop',
     ),
+    SuiModule,
     ObligationModule,
+    DepositModule,
+    WithdrawModule,
+    BorrowModule,
+    RepayModule,
+    CollateralModule,
+    DebtModule,
   ],
   providers: [AppService],
 })

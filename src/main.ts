@@ -1,13 +1,10 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-// import { AppService } from './app.service';
-import { ObligationService } from './obligation/obligation.service';
+import { AppService } from './app.service';
 
 async function bootstrap() {
   const app = await NestFactory.createApplicationContext(AppModule);
-  // application logic...
-  const obligationService = app.get(ObligationService);
-  // await obligationService.listenEvents();
-  obligationService.loopQueryEvents();
+  const appService = app.get(AppService);
+  appService.loopQueryEvents();
 }
 bootstrap();
