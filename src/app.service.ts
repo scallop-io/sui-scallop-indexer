@@ -8,6 +8,7 @@ import { BorrowService } from './borrow/borrow.service';
 import { RepayService } from './repay/repay.service';
 import { CollateralService } from './collateral/collateral.service';
 import { DebtService } from './debt/debt.service';
+import { LiquidateService } from './liquidate/liquidate.service';
 
 @Injectable()
 export class AppService {
@@ -34,6 +35,9 @@ export class AppService {
 
   @Inject(DebtService)
   private readonly _debtService: DebtService;
+
+  @Inject(LiquidateService)
+  private readonly _liquidateService: LiquidateService;
 
   async loopQueryEvents(): Promise<void> {
     let hasCollateralsChanged = false;
@@ -94,6 +98,18 @@ export class AppService {
         hasDebtsChanged = true;
       }
       console.log(`repayData.length[${repayData.length}].`);
+
+      const liquidateData =
+        await this._liquidateService.updateLiquidatesFromEventData(
+          this._suiService,
+          this._obligationService,
+          changedObligationMap,
+        );
+      if (liquidateData.length > 0) {
+        hasCollateralsChanged = true;
+        hasDebtsChanged = true;
+      }
+      console.log(`liquidateData.length[${liquidateData.length}].`);
 
       if (hasCollateralsChanged) {
         await this._collateralService.updateCollateralsFromObligationMap(

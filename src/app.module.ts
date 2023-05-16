@@ -9,6 +9,7 @@ import { BorrowModule } from './borrow/borrow.module';
 import { RepayModule } from './repay/repay.module';
 import { CollateralModule } from './collateral/collateral.module';
 import { DebtModule } from './debt/debt.module';
+import { LiquidateModule } from './liquidate/liquidate.module';
 import * as process from 'process';
 import * as dotenv from 'dotenv';
 
@@ -27,6 +28,7 @@ dotenv.config();
     RepayModule,
     CollateralModule,
     DebtModule,
+    LiquidateModule,
   ],
   providers: [AppService],
 })
