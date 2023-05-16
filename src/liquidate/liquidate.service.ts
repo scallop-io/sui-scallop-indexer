@@ -49,11 +49,12 @@ export class LiquidateService {
       obligationMap,
       async (item, obligation) => {
         const liquidate = {
-          debtType: item.parsedJson.debt_type,
-          collateralType: item.parsedJson.collateral_type,
+          debtType: item.parsedJson.debt_type.name,
+          collateralType: item.parsedJson.collateral_type.name,
           repayOnBehalf: item.parsedJson.repay_on_behalf,
           repayRevenue: item.parsedJson.repay_revenue,
           liqAmount: item.parsedJson.liq_amount,
+          liquidator: item.parsedJson.liquidator,
 
           obligation_id: obligation.obligation_id,
           obligation: obligation,

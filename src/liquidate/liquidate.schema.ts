@@ -31,6 +31,9 @@ export class Liquidate {
   @Prop()
   liqAmount?: string;
 
+  @Prop()
+  liquidator?: string;
+
   @Prop({ index: true, sparse: true })
   obligation_id: string;
 
