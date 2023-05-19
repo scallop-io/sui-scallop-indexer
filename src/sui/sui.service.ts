@@ -3,7 +3,11 @@ import { Inject, Injectable } from '@nestjs/common';
 import { NetworkType, SuiKit } from '@scallop-dao/sui-kit';
 import { EventState } from 'src/eventstate/eventstate.schema';
 import { EventStateService } from 'src/eventstate/eventstate.service';
-import { ObligationDocument } from 'src/obligation/obligation.schema';
+import {
+  Collateral,
+  Debt,
+  ObligationDocument,
+} from 'src/obligation/obligation.schema';
 import { ObligationService } from 'src/obligation/obligation.service';
 
 @Injectable()
@@ -55,7 +59,7 @@ export class SuiService {
             limit: limit,
             order: 'ascending',
           });
-        console.log(`[${eventName}]: qurey from start.`);
+        console.log(`[${eventName}]: qurey from <start>.`);
       } else {
         latestEvent =
           await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
@@ -69,7 +73,7 @@ export class SuiService {
             limit: limit,
             order: 'ascending',
           });
-        console.log(`[${eventName}]: qurey from cursor[${cursorTxDigest}].`);
+        console.log(`[${eventName}]: qurey from cursor <${cursorTxDigest}>.`);
       }
 
       for (const element of latestEvent.data) {
@@ -128,10 +132,12 @@ export class SuiService {
         }
 
         // Prase data
-        obligation = await updateCallback(item, obligation);
+        const updatedObligation = await updateCallback(item, obligation);
 
-        obligationMap.set(obligation.obligation_id, obligation);
-        console.log(`[${eventName}]: update <${obligation.obligation_id}>`);
+        obligationMap.set(obligation.obligation_id, updatedObligation);
+        console.log(
+          `[${eventName}]: update <${updatedObligation.obligation_id}>`,
+        );
       }
 
       console.log(`[${eventName}]: update <${eventData.length}> events.`);
@@ -144,42 +150,68 @@ export class SuiService {
     }
   }
 
-  async updateFromObligationMap(
-    fieldName: string,
-    obligationMap: Map<string, ObligationDocument>,
-    processField: (
-      item: any,
-      fieldObjs: any,
-      obligation: ObligationDocument,
-    ) => Promise<ObligationDocument>,
-  ): Promise<void> {
-    const keys = [...obligationMap.keys()];
-    const obligationObjs = await SuiService.getSuiKit().getObjects(keys);
+  async getCollaterals(parentId: string): Promise<Collateral[]> {
+    const collaterals: Collateral[] = [];
 
-    for (const obligationObj of obligationObjs) {
-      const parentId =
-        obligationObj.objectFields[fieldName].fields.table.fields.id.id;
-      const dynamicFields = await SuiService.getSuiKit()
+    const dynamicFields = await SuiService.getSuiKit()
+      .provider()
+      .getDynamicFields({ parentId: parentId });
+    for (const item of dynamicFields.data) {
+      const fieldObjs = await SuiService.getSuiKit()
         .provider()
-        .getDynamicFields({ parentId });
+        .getDynamicFieldObject({
+          parentId: parentId,
+          name: {
+            type: item.name.type,
+            value: item.name.value,
+          },
+        });
 
-      let obligation = obligationMap.get(obligationObj.objectId);
-      for (const item of dynamicFields.data) {
-        const fieldObjs = await SuiService.getSuiKit()
-          .provider()
-          .getDynamicFieldObject({
-            parentId: parentId,
-            name: {
-              type: item.name.type,
-              value: item.name.value,
-            },
-          });
-
-        obligation = await processField(item, fieldObjs, obligation);
-
-        obligationMap.set(obligation.obligation_id, obligation);
-        console.log(`[${fieldName}]: update <${obligation.obligation_id}>`);
+      let amount = '';
+      if ('fields' in fieldObjs.data.content) {
+        amount = fieldObjs.data.content.fields.value.fields.amount;
       }
+
+      const collateral = {
+        asset: item.name.value.name,
+        amount: amount,
+      } as Collateral;
+      collaterals.push(collateral);
     }
+    return collaterals;
+  }
+
+  async getDebts(parentId: string): Promise<Debt[]> {
+    const debts: Debt[] = [];
+
+    const dynamicFields = await SuiService.getSuiKit()
+      .provider()
+      .getDynamicFields({ parentId: parentId });
+    for (const item of dynamicFields.data) {
+      const fieldObjs = await SuiService.getSuiKit()
+        .provider()
+        .getDynamicFieldObject({
+          parentId: parentId,
+          name: {
+            type: item.name.type,
+            value: item.name.value,
+          },
+        });
+
+      let amount = '';
+      let borrowIdx = '';
+      if ('fields' in fieldObjs.data.content) {
+        amount = fieldObjs.data.content.fields.value.fields.amount;
+        borrowIdx = fieldObjs.data.content.fields.value.fields.borrow_index;
+      }
+      const debt = {
+        asset: item.name.value.name,
+        amount: amount,
+        borrowIndex: borrowIdx,
+      } as Debt;
+
+      debts.push(debt);
+    }
+    return debts;
   }
 }

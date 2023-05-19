@@ -3,6 +3,27 @@ import { now, Document } from 'mongoose';
 
 export type ObligationDocument = Obligation & Document;
 
+@Schema({ _id: false })
+export class Collateral {
+  @Prop()
+  asset?: string;
+
+  @Prop()
+  amount?: string;
+}
+
+@Schema({ _id: false })
+export class Debt {
+  @Prop()
+  asset?: string;
+
+  @Prop()
+  amount?: string;
+
+  @Prop()
+  borrowIndex: string;
+}
+
 @Schema({
   versionKey: 'version',
   toJSON: {
@@ -26,6 +47,12 @@ export class Obligation {
 
   @Prop()
   timestampMs?: string;
+
+  @Prop({ default: [] })
+  collaterals?: Collateral[];
+
+  @Prop({ default: [] })
+  debts?: Debt[];
 
   @Prop({ default: now().toString() })
   createdAt?: string;

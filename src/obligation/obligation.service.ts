@@ -40,12 +40,11 @@ export class ObligationService {
     return this.obligationModel.findOne({ obligation_id: id }).exec();
   }
 
-  // findOneAndUpdateObligation
   async findOneAndUpdateObligation(
     id: string,
-    obligation: Obligation,
+    obligation: ObligationDocument,
   ): Promise<ObligationDocument> {
-    return this.obligationModel
+    return await this.obligationModel
       .findOneAndUpdate({ obligation_id: id }, obligation, {
         upsert: true,
         new: true,
@@ -70,12 +69,63 @@ export class ObligationService {
           timestampMs: item.timestampMs,
         } as ObligationDocument;
 
-        obligation = await this.findOneAndUpdateObligation(
+        return await this.findOneAndUpdateObligation(
           obligation.obligation_id,
           obligation,
         );
-        return obligation;
       },
     );
+  }
+
+  async updateCollateralsInObligationMap(
+    suiService: SuiService,
+    obligationMap: Map<string, ObligationDocument>,
+  ): Promise<void> {
+    const keys = [...obligationMap.keys()];
+    const obligationObjs = await SuiService.getSuiKit().getObjects(keys);
+    for (const obligationObj of obligationObjs) {
+      const parentId =
+        obligationObj.objectFields['collaterals'].fields.table.fields.id.id;
+      const collaterals = await suiService.getCollaterals(parentId);
+
+      if (collaterals.length > 0) {
+        const obligation = await this.findByObligation(obligationObj.objectId);
+        obligation.collaterals = collaterals;
+
+        const savedObligation = await this.findOneAndUpdateObligation(
+          obligation.obligation_id,
+          obligation,
+        );
+        console.log(
+          `[Collaterals]: update <${collaterals.length}> in <${savedObligation.obligation_id}>`,
+        );
+      }
+    }
+  }
+
+  async updateDebtsInObligationMap(
+    suiService: SuiService,
+    obligationMap: Map<string, ObligationDocument>,
+  ): Promise<void> {
+    const keys = [...obligationMap.keys()];
+    const obligationObjs = await SuiService.getSuiKit().getObjects(keys);
+    for (const obligationObj of obligationObjs) {
+      const parentId =
+        obligationObj.objectFields['debts'].fields.table.fields.id.id;
+      const debts = await suiService.getDebts(parentId);
+
+      if (debts.length > 0) {
+        const obligation = await this.findByObligation(obligationObj.objectId);
+        obligation.debts = debts;
+
+        const savedObligation = await this.findOneAndUpdateObligation(
+          obligation.obligation_id,
+          obligation,
+        );
+        console.log(
+          `[Debts]: update <${debts.length}> in <${savedObligation.obligation_id}>`,
+        );
+      }
+    }
   }
 }

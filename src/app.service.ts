@@ -6,8 +6,6 @@ import { SuiService } from './sui/sui.service';
 import { WithdrawService } from './withdraw/withdraw.service';
 import { BorrowService } from './borrow/borrow.service';
 import { RepayService } from './repay/repay.service';
-import { CollateralService } from './collateral/collateral.service';
-import { DebtService } from './debt/debt.service';
 import { LiquidateService } from './liquidate/liquidate.service';
 
 @Injectable()
@@ -30,18 +28,13 @@ export class AppService {
   @Inject(RepayService)
   private readonly _repayService: RepayService;
 
-  @Inject(CollateralService)
-  private readonly _collateralService: CollateralService;
-
-  @Inject(DebtService)
-  private readonly _debtService: DebtService;
-
   @Inject(LiquidateService)
   private readonly _liquidateService: LiquidateService;
 
   async loopQueryEvents(): Promise<void> {
     let hasCollateralsChanged = false;
     let hasDebtsChanged = false;
+
     while (true) {
       const start = new Date().getTime();
 
@@ -51,11 +44,11 @@ export class AppService {
           this._suiService,
           changedObligationMap,
         );
+
       if (obligationData.length > 0) {
         hasCollateralsChanged = true;
         hasDebtsChanged = true;
       }
-      console.log(`changedObligationMap.size[${changedObligationMap.size}].`);
 
       const depositData =
         await this._depositService.updateDepositsFromEventData(
@@ -66,7 +59,6 @@ export class AppService {
       if (depositData.length > 0) {
         hasCollateralsChanged = true;
       }
-      console.log(`depositData.length[${depositData.length}].`);
 
       const withdrawData =
         await this._withdrawService.updateWithdrawsFromEventData(
@@ -77,7 +69,6 @@ export class AppService {
       if (withdrawData.length > 0) {
         hasCollateralsChanged = true;
       }
-      console.log(`withdrawData.length[${withdrawData.length}].`);
 
       const borrowData = await this._borrowService.updateBorrowsFromEventData(
         this._suiService,
@@ -87,7 +78,6 @@ export class AppService {
       if (borrowData.length > 0) {
         hasDebtsChanged = true;
       }
-      console.log(`borrowData.length[${borrowData.length}].`);
 
       const repayData = await this._repayService.updateRepaysFromEventData(
         this._suiService,
@@ -97,7 +87,6 @@ export class AppService {
       if (repayData.length > 0) {
         hasDebtsChanged = true;
       }
-      console.log(`repayData.length[${repayData.length}].`);
 
       const liquidateData =
         await this._liquidateService.updateLiquidatesFromEventData(
@@ -109,17 +98,17 @@ export class AppService {
         hasCollateralsChanged = true;
         hasDebtsChanged = true;
       }
-      console.log(`liquidateData.length[${liquidateData.length}].`);
 
       if (hasCollateralsChanged) {
-        await this._collateralService.updateCollateralsFromObligationMap(
+        await this._obligationService.updateCollateralsInObligationMap(
           this._suiService,
           changedObligationMap,
         );
         hasCollateralsChanged = false;
       }
+
       if (hasDebtsChanged) {
-        await this._debtService.updateDebtsFromObligationMap(
+        await this._obligationService.updateDebtsInObligationMap(
           this._suiService,
           changedObligationMap,
         );
