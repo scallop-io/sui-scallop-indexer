@@ -1,6 +1,7 @@
 import { PaginatedEvents } from '@mysten/sui.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { NetworkType, SuiKit } from '@scallop-dao/sui-kit';
+import { BorrowDynamic } from 'src/borrow-dynamic/borrow-dynamic.schema';
 import { EventState } from 'src/eventstate/eventstate.schema';
 import { EventStateService } from 'src/eventstate/eventstate.service';
 import {
@@ -146,7 +147,7 @@ export class SuiService {
       console.error(
         `Error updating event data for ${eventType}: ${error.message}`,
       );
-      throw error;
+      // throw error;
     }
   }
 
@@ -213,5 +214,42 @@ export class SuiService {
       debts.push(debt);
     }
     return debts;
+  }
+
+  async getBorrowDynamics(market: string): Promise<Map<string, BorrowDynamic>> {
+    const borrowDynamics = new Map<string, BorrowDynamic>();
+    try {
+      const objs = await SuiService.getSuiKit().getObjects([market]);
+      const marketObj = objs[0];
+      for (const content of marketObj.objectFields.borrow_dynamics.fields.keys
+        .fields.contents) {
+        const dynamicObjects = await SuiService.getSuiKit()
+          .provider()
+          .getDynamicFieldObject({
+            parentId:
+              marketObj.objectFields.borrow_dynamics.fields.table.fields.id.id,
+            name: {
+              type: '0x1::type_name::TypeName',
+              value: content.fields.name,
+            },
+          });
+
+        if ('fields' in dynamicObjects.data.content) {
+          borrowDynamics.set(content.fields.name, {
+            coinType: content.fields.name,
+            borrowIndex:
+              dynamicObjects.data.content.fields.value.fields.borrow_index,
+            interestRate:
+              dynamicObjects.data.content.fields.value.fields.interest_rate
+                .fields.value,
+            lastUpdated:
+              dynamicObjects.data.content.fields.value.fields.last_updated,
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Error caught while getBorrowDynamics. Error: ', e);
+    }
+    return borrowDynamics;
   }
 }
