@@ -126,7 +126,9 @@ export class AppService {
 
       const end = new Date().getTime();
       const execTime = (end - start) / 1000;
-      console.log(`=== loopQueryEvents exec Times: <${execTime}> seconds ===`);
+      console.log(
+        `[<${new Date()}>]==== loopQueryEvents : <${execTime}> secs ====`,
+      );
       if (execTime < Number(process.env.QUERY_INTERVAL_SECONDS)) {
         await delay(
           (Number(process.env.QUERY_INTERVAL_SECONDS) - execTime) * 1000,
