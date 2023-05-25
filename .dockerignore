@@ -1,0 +1,4 @@
+.anchor/
+node_modules/
+test/
+.env

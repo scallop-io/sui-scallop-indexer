@@ -7,6 +7,7 @@ import { WithdrawService } from './withdraw/withdraw.service';
 import { BorrowService } from './borrow/borrow.service';
 import { RepayService } from './repay/repay.service';
 import { LiquidateService } from './liquidate/liquidate.service';
+import { BorrowDynamicService } from './borrow-dynamic/borrow-dynamic.service';
 
 @Injectable()
 export class AppService {
@@ -31,12 +32,20 @@ export class AppService {
   @Inject(LiquidateService)
   private readonly _liquidateService: LiquidateService;
 
+  @Inject(BorrowDynamicService)
+  private readonly _borrowDynamicService: BorrowDynamicService;
+
   async loopQueryEvents(): Promise<void> {
     let hasCollateralsChanged = false;
     let hasDebtsChanged = false;
 
     while (true) {
       const start = new Date().getTime();
+
+      this._borrowDynamicService.updateBorrowDynamics(
+        this._suiService,
+        process.env.MARKET_ID,
+      );
 
       const changedObligationMap = new Map();
       const obligationData =
@@ -117,7 +126,9 @@ export class AppService {
 
       const end = new Date().getTime();
       const execTime = (end - start) / 1000;
-      console.log(`=== loopQueryEvents exec Times: <${execTime}> seconds ===`);
+      console.log(
+        `[<${new Date()}>]==== loopQueryEvents : <${execTime}> secs ====`,
+      );
       if (execTime < Number(process.env.QUERY_INTERVAL_SECONDS)) {
         await delay(
           (Number(process.env.QUERY_INTERVAL_SECONDS) - execTime) * 1000,

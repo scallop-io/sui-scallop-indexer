@@ -81,25 +81,33 @@ export class ObligationService {
     suiService: SuiService,
     obligationMap: Map<string, ObligationDocument>,
   ): Promise<void> {
-    const keys = [...obligationMap.keys()];
-    const obligationObjs = await SuiService.getSuiKit().getObjects(keys);
-    for (const obligationObj of obligationObjs) {
-      const parentId =
-        obligationObj.objectFields['collaterals'].fields.table.fields.id.id;
-      const collaterals = await suiService.getCollaterals(parentId);
+    try {
+      const keys = [...obligationMap.keys()];
+      const obligationObjs = await SuiService.getSuiKit().getObjects(keys);
+      for (const obligationObj of obligationObjs) {
+        const parentId =
+          obligationObj.objectFields['collaterals'].fields.table.fields.id.id;
+        const collaterals = await suiService.getCollaterals(parentId);
 
-      if (collaterals.length > 0) {
-        const obligation = await this.findByObligation(obligationObj.objectId);
-        obligation.collaterals = collaterals;
+        if (collaterals.length > 0) {
+          const obligation = await this.findByObligation(
+            obligationObj.objectId,
+          );
+          obligation.collaterals = collaterals;
 
-        const savedObligation = await this.findOneAndUpdateObligation(
-          obligation.obligation_id,
-          obligation,
-        );
-        console.log(
-          `[Collaterals]: update <${collaterals.length}> in <${savedObligation.obligation_id}>`,
-        );
+          const savedObligation = await this.findOneAndUpdateObligation(
+            obligation.obligation_id,
+            obligation,
+          );
+          console.log(
+            `[Collaterals]: update <${collaterals.length}> in <${savedObligation.obligation_id}>`,
+          );
+        }
       }
+    } catch (e) {
+      console.error(
+        `Error caught while updateCollateralsInObligationMap() - Error: ${e}`,
+      );
     }
   }
 
@@ -107,25 +115,33 @@ export class ObligationService {
     suiService: SuiService,
     obligationMap: Map<string, ObligationDocument>,
   ): Promise<void> {
-    const keys = [...obligationMap.keys()];
-    const obligationObjs = await SuiService.getSuiKit().getObjects(keys);
-    for (const obligationObj of obligationObjs) {
-      const parentId =
-        obligationObj.objectFields['debts'].fields.table.fields.id.id;
-      const debts = await suiService.getDebts(parentId);
+    try {
+      const keys = [...obligationMap.keys()];
+      const obligationObjs = await SuiService.getSuiKit().getObjects(keys);
+      for (const obligationObj of obligationObjs) {
+        const parentId =
+          obligationObj.objectFields['debts'].fields.table.fields.id.id;
+        const debts = await suiService.getDebts(parentId);
 
-      if (debts.length > 0) {
-        const obligation = await this.findByObligation(obligationObj.objectId);
-        obligation.debts = debts;
+        if (debts.length > 0) {
+          const obligation = await this.findByObligation(
+            obligationObj.objectId,
+          );
+          obligation.debts = debts;
 
-        const savedObligation = await this.findOneAndUpdateObligation(
-          obligation.obligation_id,
-          obligation,
-        );
-        console.log(
-          `[Debts]: update <${debts.length}> in <${savedObligation.obligation_id}>`,
-        );
+          const savedObligation = await this.findOneAndUpdateObligation(
+            obligation.obligation_id,
+            obligation,
+          );
+          console.log(
+            `[Debts]: update <${debts.length}> in <${savedObligation.obligation_id}>`,
+          );
+        }
       }
+    } catch (e) {
+      console.error(
+        `Error caught while updateDebtsInObligationMap() - Error: ${e}`,
+      );
     }
   }
 }

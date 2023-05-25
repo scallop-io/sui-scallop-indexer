@@ -8,6 +8,7 @@ import { WithdrawModule } from './withdraw/withdraw.module';
 import { BorrowModule } from './borrow/borrow.module';
 import { RepayModule } from './repay/repay.module';
 import { LiquidateModule } from './liquidate/liquidate.module';
+import { BorrowDynamicModule } from './borrow-dynamic/borrow-dynamic.module';
 import * as process from 'process';
 import * as dotenv from 'dotenv';
 
@@ -25,6 +26,7 @@ dotenv.config();
     BorrowModule,
     RepayModule,
     LiquidateModule,
+    BorrowDynamicModule,
   ],
   providers: [AppService],
 })
