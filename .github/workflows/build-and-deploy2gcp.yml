@@ -20,8 +20,6 @@ jobs:
         with:
           file: './Dockerfile'
           context: .
-          build-args: |
-            GITHUB_ACCESS_TOKEN=${{ secrets.GH_ACCESS_TOKEN }}
           push: true
           tags: nathan7scallop/scallop-sui-indexer:latest
   deploy:
