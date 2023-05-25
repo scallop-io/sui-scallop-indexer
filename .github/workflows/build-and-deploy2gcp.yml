@@ -5,36 +5,40 @@ on:
       - borrow-dynamics
 
 jobs:
-  build_and_deploy:
-    name: Build and Deploy
+  build:
+    name: Build Package
     runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-      id-token: 'write'
-    env:
-      GCP_WORKLOAD_ID: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-      GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-      SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      APP_DIRECTORY: sui-scallop-indexer
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v0'
+      - uses: actions/checkout@v2
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
         with:
-          workload_identity_provider: ${{ env.GCP_WORKLOAD_ID }}
-          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
-
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v0'
-
-      - name: Deploy to VM
-        run: |
-          echo "${{ env.SSH_PRIVATE_KEY }}" > id_rsa
-          chmod 600 id_rsa
-          ssh -o "StrictHostKeyChecking=no" -i id_rsa ${{ env.SSH_USERNAME }}@${{ env.SSH_HOST }} "cd ${{ env.APP_DIRECTORY }} && git pull && pnpm install && pnpm run build && pm2 restart all"
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          file: './Dockerfile'
+          context: .
+          build-args: |
+            GITHUB_ACCESS_TOKEN=${{ secrets.GH_ACCESS_TOKEN }}
+          push: true
+          tags: nathan7scallop/scallop-sui-indexer:latest
+  deploy:
+    needs: build
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy Using ssh
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            docker stop scallop-sui-indexer
+            docker rm scallop-sui-indexer
+            docker rmi nathan7scallop/scallop-sui-indexer:latest
+            docker pull nathan7scallop/scallop-sui-indexer:latest
+            docker run -d --restart unless-stopped --name scallop-sui-indexer --env-file /usr/local/src/envs/.prod-testnet.env nathan7scallop/scallop-sui-indexer:latest
