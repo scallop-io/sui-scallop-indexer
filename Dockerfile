@@ -1,6 +1,6 @@
 FROM node:lts As build
 
-RUN curl -f https://get.pnpm.io/v8.12.js | node - add --global pnpm
+RUN npm install -g pnpm
 
 WORKDIR /usr/src/app
 
