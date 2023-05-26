@@ -3,8 +3,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Borrow, BorrowDocument } from './borrow.schema';
 import { SuiService } from 'src/sui/sui.service';
-import { ObligationService } from 'src/obligation/obligation.service';
-import { ObligationDocument } from 'src/obligation/obligation.schema';
+// import { ObligationService } from 'src/obligation/obligation.service';
+// import { ObligationDocument } from 'src/obligation/obligation.schema';
+import { EventState } from 'src/eventstate/eventstate.schema';
+import * as mongoose from 'mongoose';
 
 @Injectable()
 export class BorrowService {
@@ -13,53 +15,28 @@ export class BorrowService {
     private borrowModel: Model<BorrowDocument>,
   ) {}
 
-  async create(borrow: Borrow): Promise<BorrowDocument> {
+  async create(
+    borrow: Borrow,
+    session: mongoose.ClientSession | null = null,
+  ): Promise<BorrowDocument> {
     const createdBorrow = new this.borrowModel(borrow);
-    return createdBorrow.save();
+    return createdBorrow.save({ session });
   }
 
-  async findAll(): Promise<BorrowDocument[]> {
-    return this.borrowModel.find().exec();
-  }
-
-  async findOne(id: string): Promise<BorrowDocument> {
-    return this.borrowModel.findById(id).exec();
-  }
-
-  async update(id: string, borrow: Borrow): Promise<BorrowDocument> {
-    return this.borrowModel
-      .findByIdAndUpdate(id, borrow, {
-        new: true,
-      })
-      .exec();
-  }
-
-  async findBorrowsByObligationId(id: string): Promise<BorrowDocument[]> {
-    return this.borrowModel.find({ obligation_id: id }).exec();
-  }
-
-  async updateBorrowsFromEventData(
+  async getBorrowsFromQueryEvent(
     suiService: SuiService,
-    obligationService: ObligationService,
-    obligationMap: Map<string, ObligationDocument>,
+    eventStateMap: Map<string, EventState>,
   ): Promise<any[]> {
-    return await suiService.updateFromEventData(
-      obligationService,
+    return await suiService.getEventsFromQuery(
       process.env.EVENT_BORROW,
-      obligationMap,
-      async (item, obligation) => {
-        const borrow: Borrow = {
+      eventStateMap,
+      async (item) => {
+        return {
+          obligation_id: item.parsedJson.obligation,
           asset: item.parsedJson.asset.name,
           amount: item.parsedJson.amount,
           timestampMs: item.timestampMs,
-
-          obligation_id: obligation.obligation_id,
-          obligation: obligation,
         };
-
-        await this.create(borrow);
-
-        return obligation;
       },
     );
   }

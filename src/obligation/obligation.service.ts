@@ -3,6 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Obligation, ObligationDocument } from './obligation.schema';
 import { SuiService } from 'src/sui/sui.service';
+import { EventState } from 'src/eventstate/eventstate.schema';
+import * as mongoose from 'mongoose';
 
 @Injectable()
 export class ObligationService {
@@ -11,75 +13,35 @@ export class ObligationService {
     private obligationModel: Model<ObligationDocument>,
   ) {}
 
-  async create(obligation: Obligation): Promise<ObligationDocument> {
-    const createdObligation = new this.obligationModel(obligation);
-    return createdObligation.save();
-  }
-
-  async findAll(): Promise<ObligationDocument[]> {
-    return this.obligationModel.find().exec();
-  }
-
-  async findOne(id: string): Promise<ObligationDocument> {
-    return this.obligationModel.findById(id).exec();
-  }
-
-  async update(
+  // findOneByObligationId
+  async findByObligation(
     id: string,
-    obligation: Obligation,
+    session: mongoose.ClientSession | null = null,
   ): Promise<ObligationDocument> {
     return this.obligationModel
-      .findByIdAndUpdate(id, obligation, {
-        new: true,
-      })
+      .findOne({ obligation_id: id })
+      .session(session)
       .exec();
-  }
-
-  // findOneByObligationId
-  async findByObligation(id: string): Promise<ObligationDocument> {
-    return this.obligationModel.findOne({ obligation_id: id }).exec();
   }
 
   async findOneAndUpdateObligation(
     id: string,
     obligation: ObligationDocument,
+    session: mongoose.ClientSession | null = null,
   ): Promise<ObligationDocument> {
-    return await this.obligationModel
+    return this.obligationModel
       .findOneAndUpdate({ obligation_id: id }, obligation, {
         upsert: true,
         new: true,
       })
+      .session(session)
       .exec();
-  }
-
-  // update created obligations
-  async updateObligationsFromEventData(
-    suiService: SuiService,
-    obligationMap: Map<string, ObligationDocument>,
-  ): Promise<any[]> {
-    return await suiService.updateFromEventData(
-      this,
-      process.env.EVENT_OBLIGATION_CREATED,
-      obligationMap,
-      async (item, obligation) => {
-        obligation = {
-          obligation_id: item.parsedJson.obligation,
-          obligation_key: item.parsedJson.obligation_key,
-          sender: item.parsedJson.sender,
-          timestampMs: item.timestampMs,
-        } as ObligationDocument;
-
-        return await this.findOneAndUpdateObligation(
-          obligation.obligation_id,
-          obligation,
-        );
-      },
-    );
   }
 
   async updateCollateralsInObligationMap(
     suiService: SuiService,
     obligationMap: Map<string, ObligationDocument>,
+    session: mongoose.ClientSession | null = null,
   ): Promise<void> {
     try {
       const keys = [...obligationMap.keys()];
@@ -92,12 +54,14 @@ export class ObligationService {
         if (collaterals.length > 0) {
           const obligation = await this.findByObligation(
             obligationObj.objectId,
+            session,
           );
           obligation.collaterals = collaterals;
 
           const savedObligation = await this.findOneAndUpdateObligation(
             obligation.obligation_id,
             obligation,
+            session,
           );
           console.log(
             `[Collaterals]: update <${collaterals.length}> in <${savedObligation.obligation_id}>`,
@@ -106,14 +70,16 @@ export class ObligationService {
       }
     } catch (e) {
       console.error(
-        `Error caught while updateCollateralsInObligationMap() - Error: ${e}`,
+        `Error caught while updateCollateralsInObligationMap(): ${e}`,
       );
+      throw e;
     }
   }
 
   async updateDebtsInObligationMap(
     suiService: SuiService,
     obligationMap: Map<string, ObligationDocument>,
+    session: mongoose.ClientSession | null = null,
   ): Promise<void> {
     try {
       const keys = [...obligationMap.keys()];
@@ -126,12 +92,14 @@ export class ObligationService {
         if (debts.length > 0) {
           const obligation = await this.findByObligation(
             obligationObj.objectId,
+            session,
           );
           obligation.debts = debts;
 
           const savedObligation = await this.findOneAndUpdateObligation(
             obligation.obligation_id,
             obligation,
+            session,
           );
           console.log(
             `[Debts]: update <${debts.length}> in <${savedObligation.obligation_id}>`,
@@ -139,9 +107,27 @@ export class ObligationService {
         }
       }
     } catch (e) {
-      console.error(
-        `Error caught while updateDebtsInObligationMap() - Error: ${e}`,
-      );
+      console.error(`Error caught while updateDebtsInObligationMap(): ${e}`);
+      throw e;
     }
+  }
+
+  // get created obligations
+  async getObligationsFromQueryEvent(
+    suiService: SuiService,
+    eventStateMap: Map<string, EventState>,
+  ): Promise<any[]> {
+    return await suiService.getEventsFromQuery(
+      process.env.EVENT_OBLIGATION_CREATED,
+      eventStateMap,
+      async (item) => {
+        return {
+          obligation_id: item.parsedJson.obligation,
+          obligation_key: item.parsedJson.obligation_key,
+          sender: item.parsedJson.sender,
+          timestampMs: item.timestampMs,
+        };
+      },
+    );
   }
 }

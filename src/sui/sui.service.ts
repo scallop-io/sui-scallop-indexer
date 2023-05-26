@@ -4,12 +4,7 @@ import { NetworkType, SuiKit } from '@scallop-dao/sui-kit';
 import { BorrowDynamic } from 'src/borrow-dynamic/borrow-dynamic.schema';
 import { EventState } from 'src/eventstate/eventstate.schema';
 import { EventStateService } from 'src/eventstate/eventstate.service';
-import {
-  Collateral,
-  Debt,
-  ObligationDocument,
-} from 'src/obligation/obligation.schema';
-import { ObligationService } from 'src/obligation/obligation.service';
+import { Collateral, Debt } from 'src/obligation/obligation.schema';
 
 @Injectable()
 export class SuiService {
@@ -31,134 +26,9 @@ export class SuiService {
         });
       }
     } catch (e) {
-      console.error('Error caught while getSuiKit() Error: ', e);
+      console.error('Error caught while getSuiKit(): ', e);
     }
     return this._suiKit;
-  }
-
-  // get event data
-  async getEventData(
-    eventType: string,
-    limit = Number(process.env.QUERY_LIMIT),
-    cursorTxDigest?: string,
-    cursorEventSeq?: string,
-  ): Promise<any[]> {
-    const eventData = [];
-    try {
-      // Find if there is cursor stored in DB
-      const eventName = eventType.split('::')[2];
-      const eventState = await this._eventStateService.findByEventType(
-        eventType,
-      );
-      if (eventState !== null) {
-        cursorTxDigest = eventState.nextCursorTxDigest;
-        cursorEventSeq = eventState.nextCursorEventSeq;
-      }
-
-      let hasNextPage = true;
-      let latestEvent: PaginatedEvents;
-      while (hasNextPage) {
-        if (cursorTxDigest === undefined || cursorEventSeq === undefined) {
-          latestEvent =
-            await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
-              query: {
-                MoveEventType: eventType,
-              },
-              limit: limit,
-              order: 'ascending',
-            });
-          console.log(`[${eventName}]: qurey from <start>.`);
-        } else {
-          latestEvent =
-            await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
-              query: {
-                MoveEventType: eventType,
-              },
-              cursor: {
-                txDigest: cursorTxDigest,
-                eventSeq: cursorEventSeq,
-              },
-              limit: limit,
-              order: 'ascending',
-            });
-          console.log(`[${eventName}]: qurey from cursor <${cursorTxDigest}>.`);
-        }
-
-        for (const element of latestEvent.data) {
-          eventData.push(element);
-
-          cursorTxDigest = element.id.txDigest;
-          cursorEventSeq = element.id.eventSeq;
-        }
-
-        hasNextPage = latestEvent.hasNextPage;
-        if (hasNextPage === true) {
-          cursorTxDigest = latestEvent.nextCursor.txDigest;
-          cursorEventSeq = latestEvent.nextCursor.eventSeq;
-        }
-      } //end of while
-
-      // Save Next Cursor data
-      if (eventData.length > 0) {
-        const lastEventState: EventState = {
-          eventType: eventType,
-          nextCursorTxDigest: latestEvent.nextCursor.txDigest,
-          nextCursorEventSeq: latestEvent.nextCursor.eventSeq,
-        };
-        await this._eventStateService.findOneByEventTypeAndUpdateEventState(
-          eventType,
-          lastEventState,
-        );
-      }
-    } catch (e) {
-      console.error('Error caught while getEventData() Error: ', e);
-    }
-    return eventData;
-  }
-
-  async updateFromEventData(
-    obligationService: ObligationService,
-    eventType: string,
-    obligationMap: Map<string, ObligationDocument>,
-    updateCallback: (
-      item: any,
-      obligation: ObligationDocument,
-    ) => Promise<ObligationDocument>,
-  ): Promise<any[]> {
-    let eventData = [];
-    try {
-      const eventName = eventType.split('::')[2];
-      eventData = await this.getEventData(eventType);
-
-      for (const item of eventData) {
-        const obligation_id = item.parsedJson.obligation;
-
-        let obligation = obligationMap.get(obligation_id);
-        if (obligation === undefined || !obligation) {
-          obligation = await obligationService.findByObligation(obligation_id);
-          if (!obligation) {
-            obligation = {
-              obligation_id: obligation_id,
-            } as ObligationDocument;
-          }
-        }
-
-        // Prase data
-        const updatedObligation = await updateCallback(item, obligation);
-
-        obligationMap.set(obligation.obligation_id, updatedObligation);
-        console.log(
-          `[${eventName}]: update <${updatedObligation.obligation_id}>`,
-        );
-      }
-
-      console.log(`[${eventName}]: update <${eventData.length}> events.`);
-    } catch (e) {
-      console.error(
-        `Error caught while updateFromEventData() for ${eventType} - Error: ${e}`,
-      );
-    }
-    return eventData;
   }
 
   async getCollaterals(parentId: string): Promise<Collateral[]> {
@@ -190,7 +60,7 @@ export class SuiService {
         collaterals.push(collateral);
       }
     } catch (e) {
-      console.error('Error caught while getCollaterals() Error: ', e);
+      console.error('Error caught while getCollaterals(): ', e);
     }
     return collaterals;
   }
@@ -227,7 +97,7 @@ export class SuiService {
         debts.push(debt);
       }
     } catch (e) {
-      console.error('Error caught while getDebts() Error: ', e);
+      console.error('Error caught while getDebts(): ', e);
     }
     return debts;
   }
@@ -264,8 +134,100 @@ export class SuiService {
         }
       }
     } catch (e) {
-      console.error('Error caught while getBorrowDynamics() Error: ', e);
+      console.error('Error caught while getBorrowDynamics(): ', e);
     }
     return borrowDynamics;
+  }
+
+  async getEventsFromQuery(
+    eventType: string,
+    eventStateMap: Map<string, EventState>,
+    createCallback: (item: any) => Promise<any>,
+    limit = Number(process.env.QUERY_LIMIT),
+  ): Promise<any[]> {
+    const eventObjects = [];
+    try {
+      // Find if there is cursor stored in DB
+      const eventName = eventType.split('::')[2];
+      const eventState = await this._eventStateService.findByEventType(
+        eventType,
+      );
+
+      let cursorTxDigest = undefined;
+      let cursorEventSeq = undefined;
+      if (eventState !== null) {
+        cursorTxDigest = eventState.nextCursorTxDigest;
+        cursorEventSeq = eventState.nextCursorEventSeq;
+      }
+
+      let hasNextPage = true;
+      let latestEvent: PaginatedEvents;
+      const eventData = [];
+      while (hasNextPage) {
+        if (cursorTxDigest === undefined || cursorEventSeq === undefined) {
+          latestEvent =
+            await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
+              query: {
+                MoveEventType: eventType,
+              },
+              limit: limit,
+              order: 'ascending',
+            });
+          console.debug(`[${eventName}]: qurey from <start>.`);
+        } else {
+          latestEvent =
+            await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
+              query: {
+                MoveEventType: eventType,
+              },
+              cursor: {
+                txDigest: cursorTxDigest,
+                eventSeq: cursorEventSeq,
+              },
+              limit: limit,
+              order: 'ascending',
+            });
+          console.debug(
+            `[${eventName}]: qurey from cursor <${cursorTxDigest}>.`,
+          );
+        }
+
+        for (const element of latestEvent.data) {
+          eventData.push(element);
+
+          cursorTxDigest = element.id.txDigest;
+          cursorEventSeq = element.id.eventSeq;
+        }
+
+        hasNextPage = latestEvent.hasNextPage;
+        if (hasNextPage === true) {
+          cursorTxDigest = latestEvent.nextCursor.txDigest;
+          cursorEventSeq = latestEvent.nextCursor.eventSeq;
+        }
+      } //end of while
+
+      // Prase data
+      for (const item of eventData) {
+        const newEvent = await createCallback(item);
+        eventObjects.push(newEvent);
+        // console.log(`[${eventName}]: create <${newEvent.obligation_id}>`);
+      }
+      console.log(`[${eventName}]: create <${eventObjects.length}> events.`);
+
+      // Save Next Cursor data
+      if (eventObjects.length > 0) {
+        const lastEventState: EventState = {
+          eventType: eventType,
+          nextCursorTxDigest: latestEvent.nextCursor.txDigest,
+          nextCursorEventSeq: latestEvent.nextCursor.eventSeq,
+        };
+        eventStateMap.set(eventType, lastEventState);
+      }
+    } catch (e) {
+      console.error(
+        `Error caught while getEventsFromQuery() for ${eventType}: ${e}`,
+      );
+    }
+    return eventObjects;
   }
 }

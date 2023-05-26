@@ -11,6 +11,7 @@ import { LiquidateModule } from './liquidate/liquidate.module';
 import { BorrowDynamicModule } from './borrow-dynamic/borrow-dynamic.module';
 import * as process from 'process';
 import * as dotenv from 'dotenv';
+import { EventStateModule } from './eventstate/eventstate.module';
 
 dotenv.config();
 
@@ -20,6 +21,7 @@ dotenv.config();
       process.env.MONGO_URI || 'mongodb://localhost:27017/Scallop',
     ),
     SuiModule,
+    EventStateModule,
     ObligationModule,
     DepositModule,
     WithdrawModule,
