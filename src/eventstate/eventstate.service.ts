@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { EventState, EventStateDocument } from './eventstate.schema';
+import * as mongoose from 'mongoose';
 
 @Injectable()
 export class EventStateService {
@@ -10,39 +11,26 @@ export class EventStateService {
     private eventstateModel: Model<EventStateDocument>,
   ) {}
 
-  async create(eventstate: EventState): Promise<EventState> {
-    const createdEventState = new this.eventstateModel(eventstate);
-    return createdEventState.save();
-  }
-
-  async findAll(): Promise<EventState[]> {
-    return this.eventstateModel.find().exec();
-  }
-
-  async findOne(id: string): Promise<EventState> {
-    return this.eventstateModel.findById(id).exec();
-  }
-
-  async update(id: string, eventstate: EventState): Promise<EventState> {
-    return this.eventstateModel
-      .findByIdAndUpdate(id, eventstate, {
-        new: true,
-      })
-      .exec();
-  }
-
   // findOneByEventStateI
-  async findByEventType(eventtype: string): Promise<EventState> {
-    return this.eventstateModel.findOne({ eventType: eventtype }).exec();
+  async findByEventType(
+    eventtype: string,
+    session: mongoose.ClientSession | null = null,
+  ): Promise<EventState> {
+    return this.eventstateModel
+      .findOne({ eventType: eventtype })
+      .session(session)
+      .exec();
   }
 
   // findOneAndUpdateEventState
   async findOneByEventTypeAndUpdateEventState(
     eventtype: string,
     eventstate: EventState,
+    session: mongoose.ClientSession | null = null,
   ): Promise<EventState> {
     return this.eventstateModel
       .findOneAndUpdate({ eventType: eventtype }, eventstate, { upsert: true })
+      .session(session)
       .exec();
   }
 }

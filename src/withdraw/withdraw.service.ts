@@ -3,8 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Withdraw, WithdrawDocument } from './withdraw.schema';
 import { SuiService } from 'src/sui/sui.service';
-import { ObligationService } from 'src/obligation/obligation.service';
-import { ObligationDocument } from 'src/obligation/obligation.schema';
+import { EventState } from 'src/eventstate/eventstate.schema';
+import * as mongoose from 'mongoose';
 
 @Injectable()
 export class WithdrawService {
@@ -13,53 +13,28 @@ export class WithdrawService {
     private withdrawModel: Model<WithdrawDocument>,
   ) {}
 
-  async create(withdraw: Withdraw): Promise<WithdrawDocument> {
+  async create(
+    withdraw: Withdraw,
+    session: mongoose.ClientSession | null = null,
+  ): Promise<WithdrawDocument> {
     const createdWithdraw = new this.withdrawModel(withdraw);
-    return createdWithdraw.save();
+    return createdWithdraw.save({ session });
   }
 
-  async findAll(): Promise<WithdrawDocument[]> {
-    return this.withdrawModel.find().exec();
-  }
-
-  async findOne(id: string): Promise<WithdrawDocument> {
-    return this.withdrawModel.findById(id).exec();
-  }
-
-  async update(id: string, withdraw: Withdraw): Promise<WithdrawDocument> {
-    return this.withdrawModel
-      .findByIdAndUpdate(id, withdraw, {
-        new: true,
-      })
-      .exec();
-  }
-
-  async findWithdrawsByObligationId(id: string): Promise<WithdrawDocument[]> {
-    return this.withdrawModel.find({ obligation_id: id }).exec();
-  }
-
-  async updateWithdrawsFromEventData(
+  async getWithdrawsFromQueryEvent(
     suiService: SuiService,
-    obligationService: ObligationService,
-    obligationMap: Map<string, ObligationDocument>,
+    eventStateMap: Map<string, EventState>,
   ): Promise<any[]> {
-    return await suiService.updateFromEventData(
-      obligationService,
+    return await suiService.getEventsFromQuery(
       process.env.EVENT_COLLATERAL_WITHDRAW,
-      obligationMap,
-      async (item, obligation) => {
-        const withdraw: Withdraw = {
+      eventStateMap,
+      async (item) => {
+        return {
+          obligation_id: item.parsedJson.obligation,
           asset: item.parsedJson.withdraw_asset.name,
           amount: item.parsedJson.withdraw_amount,
           timestampMs: item.timestampMs,
-
-          obligation_id: obligation.obligation_id,
-          obligation: obligation,
         };
-
-        await this.create(withdraw);
-
-        return obligation;
       },
     );
   }
