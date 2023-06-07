@@ -105,16 +105,15 @@ export class AppService {
         hasDebtsChanged = true;
       }
 
+      // update borrow dynamics
+      await this._borrowDynamicService.updateBorrowDynamics(
+        this._suiService,
+        process.env.MARKET_ID,
+      );
+
       const transactionSession = await this.connection.startSession();
       transactionSession.startTransaction();
       try {
-        // update borrow dynamics
-        await this._borrowDynamicService.updateBorrowDynamics(
-          this._suiService,
-          process.env.MARKET_ID,
-          transactionSession,
-        );
-
         // update obligations
         const changedObligationMap = new Map();
         for (const obligation of obligations) {

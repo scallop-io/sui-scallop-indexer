@@ -3,8 +3,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Repay, RepayDocument } from './repay.schema';
 import { SuiService } from 'src/sui/sui.service';
-// import { ObligationService } from 'src/obligation/obligation.service';
-// import { ObligationDocument } from 'src/obligation/obligation.schema';
 import { EventState } from 'src/eventstate/eventstate.schema';
 import * as mongoose from 'mongoose';
 

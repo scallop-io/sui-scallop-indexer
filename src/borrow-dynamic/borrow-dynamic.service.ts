@@ -44,7 +44,7 @@ export class BorrowDynamicService {
       console.log(`[BorrowDynamics]: update <${borrowDynamics.size}> dynamics`);
     } catch (e) {
       console.error('Error caught while updateBorrowDynamics(): ', e);
-      throw e;
+      // throw e;
     }
     return borrowDynamics;
   }
