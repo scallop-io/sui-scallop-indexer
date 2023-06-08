@@ -18,7 +18,10 @@ dotenv.config();
 @Module({
   imports: [
     MongooseModule.forRoot(
-      process.env.MONGO_URI || 'mongodb://localhost:27017/Scallop',
+      process.env.MONGO_URI || 'mongodb://localhost:27017/Scallop', {
+        // if the replica is only 1, set directConnection to `true`
+        directConnection: false,
+      }
     ),
     SuiModule,
     EventStateModule,
