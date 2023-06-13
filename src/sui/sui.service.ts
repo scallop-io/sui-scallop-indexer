@@ -2,6 +2,7 @@ import { PaginatedEvents } from '@mysten/sui.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { NetworkType, SuiKit } from '@scallop-dao/sui-kit';
 import { BorrowDynamic } from 'src/borrow-dynamic/borrow-dynamic.schema';
+import { delay } from 'src/common/utils/time';
 import { EventState } from 'src/eventstate/eventstate.schema';
 import { EventStateService } from 'src/eventstate/eventstate.service';
 import { Collateral, Debt } from 'src/obligation/obligation.schema';
@@ -9,9 +10,19 @@ import { Collateral, Debt } from 'src/obligation/obligation.schema';
 @Injectable()
 export class SuiService {
   private static _suiKit: SuiKit;
+  private static _queryCount = 0;
 
   @Inject(EventStateService)
   private readonly _eventStateService: EventStateService;
+
+  static checkRPCLimit() {
+    this._queryCount++;
+    if (this._queryCount >= Number(process.env.RPC_QPS)) {
+      this._queryCount = 0;
+      // Delay 1 sec to avoid query limit
+      delay(1000);
+    }
+  }
 
   public static getSuiKit() {
     try {
@@ -37,6 +48,7 @@ export class SuiService {
       const dynamicFields = await SuiService.getSuiKit()
         .provider()
         .getDynamicFields({ parentId: parentId });
+      SuiService.checkRPCLimit();
       for (const item of dynamicFields.data) {
         const fieldObjs = await SuiService.getSuiKit()
           .provider()
@@ -47,6 +59,7 @@ export class SuiService {
               value: item.name.value,
             },
           });
+        SuiService.checkRPCLimit();
 
         let amount = '';
         if ('fields' in fieldObjs.data.content) {
@@ -71,6 +84,7 @@ export class SuiService {
       const dynamicFields = await SuiService.getSuiKit()
         .provider()
         .getDynamicFields({ parentId: parentId });
+      SuiService.checkRPCLimit();
       for (const item of dynamicFields.data) {
         const fieldObjs = await SuiService.getSuiKit()
           .provider()
@@ -81,6 +95,7 @@ export class SuiService {
               value: item.name.value,
             },
           });
+        SuiService.checkRPCLimit();
 
         let amount = '';
         let borrowIdx = '';
