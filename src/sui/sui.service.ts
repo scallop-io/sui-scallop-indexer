@@ -15,12 +15,12 @@ export class SuiService {
   @Inject(EventStateService)
   private readonly _eventStateService: EventStateService;
 
-  static checkRPCLimit() {
-    this._queryCount++;
-    if (this._queryCount >= Number(process.env.RPC_QPS)) {
-      this._queryCount = 0;
+  async checkRPCLimit() {
+    SuiService._queryCount++;
+    if (SuiService._queryCount >= Number(process.env.RPC_QPS)) {
+      SuiService._queryCount = 0;
       // Delay 1 sec to avoid query limit
-      delay(1000);
+      await delay(1000);
     }
   }
 
@@ -48,7 +48,7 @@ export class SuiService {
       const dynamicFields = await SuiService.getSuiKit()
         .provider()
         .getDynamicFields({ parentId: parentId });
-      SuiService.checkRPCLimit();
+      await this.checkRPCLimit();
       for (const item of dynamicFields.data) {
         const fieldObjs = await SuiService.getSuiKit()
           .provider()
@@ -59,7 +59,7 @@ export class SuiService {
               value: item.name.value,
             },
           });
-        SuiService.checkRPCLimit();
+        await this.checkRPCLimit();
 
         let amount = '';
         if ('fields' in fieldObjs.data.content) {
@@ -84,7 +84,7 @@ export class SuiService {
       const dynamicFields = await SuiService.getSuiKit()
         .provider()
         .getDynamicFields({ parentId: parentId });
-      SuiService.checkRPCLimit();
+      await this.checkRPCLimit();
       for (const item of dynamicFields.data) {
         const fieldObjs = await SuiService.getSuiKit()
           .provider()
@@ -95,7 +95,7 @@ export class SuiService {
               value: item.name.value,
             },
           });
-        SuiService.checkRPCLimit();
+        await this.checkRPCLimit();
 
         let amount = '';
         let borrowIdx = '';
