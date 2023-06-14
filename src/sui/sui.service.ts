@@ -2,6 +2,7 @@ import { PaginatedEvents } from '@mysten/sui.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { NetworkType, SuiKit } from '@scallop-dao/sui-kit';
 import { BorrowDynamic } from 'src/borrow-dynamic/borrow-dynamic.schema';
+import { delay } from 'src/common/utils/time';
 import { EventState } from 'src/eventstate/eventstate.schema';
 import { EventStateService } from 'src/eventstate/eventstate.service';
 import { Collateral, Debt } from 'src/obligation/obligation.schema';
@@ -9,18 +10,31 @@ import { Collateral, Debt } from 'src/obligation/obligation.schema';
 @Injectable()
 export class SuiService {
   private static _suiKit: SuiKit;
+  private static _queryCount = 0;
 
   @Inject(EventStateService)
   private readonly _eventStateService: EventStateService;
 
+  static resetQueryCount() {
+    SuiService._queryCount = 0;
+  }
+
+  async checkRPCLimit() {
+    SuiService._queryCount++;
+    if (SuiService._queryCount >= Number(process.env.RPC_QPS)) {
+      // Delay 1 sec to avoid query limit
+      console.debug('Delay 1 sec to avoid query limit');
+      await delay(1000);
+      SuiService._queryCount = 0;
+    }
+  }
+
   public static getSuiKit() {
     try {
       if (!this._suiKit) {
-        const mnemonics = process.env.MNEMONICS;
         const network = <NetworkType>process.env.NETWORK;
         const fullNodeUrl = process.env.RPC_ENDPOINT ?? undefined;
         this._suiKit = new SuiKit({
-          mnemonics,
           networkType: network,
           fullnodeUrl: fullNodeUrl,
         });
@@ -37,6 +51,7 @@ export class SuiService {
       const dynamicFields = await SuiService.getSuiKit()
         .provider()
         .getDynamicFields({ parentId: parentId });
+      await this.checkRPCLimit();
       for (const item of dynamicFields.data) {
         const fieldObjs = await SuiService.getSuiKit()
           .provider()
@@ -47,6 +62,7 @@ export class SuiService {
               value: item.name.value,
             },
           });
+        await this.checkRPCLimit();
 
         let amount = '';
         if ('fields' in fieldObjs.data.content) {
@@ -71,6 +87,7 @@ export class SuiService {
       const dynamicFields = await SuiService.getSuiKit()
         .provider()
         .getDynamicFields({ parentId: parentId });
+      await this.checkRPCLimit();
       for (const item of dynamicFields.data) {
         const fieldObjs = await SuiService.getSuiKit()
           .provider()
@@ -81,6 +98,7 @@ export class SuiService {
               value: item.name.value,
             },
           });
+        await this.checkRPCLimit();
 
         let amount = '';
         let borrowIdx = '';
@@ -106,6 +124,7 @@ export class SuiService {
     const borrowDynamics = new Map<string, BorrowDynamic>();
     try {
       const objs = await SuiService.getSuiKit().getObjects([market]);
+      await this.checkRPCLimit();
       const marketObj = objs[0];
       for (const content of marketObj.objectFields.borrow_dynamics.fields.keys
         .fields.contents) {
@@ -119,6 +138,7 @@ export class SuiService {
               value: content.fields.name,
             },
           });
+        await this.checkRPCLimit();
 
         if ('fields' in dynamicObjects.data.content) {
           borrowDynamics.set(content.fields.name, {
@@ -173,7 +193,7 @@ export class SuiService {
               limit: limit,
               order: 'ascending',
             });
-          console.debug(`[${eventName}]: qurey from <start>.`);
+          console.debug(`[${eventName}]: query from <start>.`);
         } else {
           latestEvent =
             await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
@@ -188,9 +208,10 @@ export class SuiService {
               order: 'ascending',
             });
           console.debug(
-            `[${eventName}]: qurey from cursor <${cursorTxDigest}>.`,
+            `[${eventName}]: query from cursor <${cursorTxDigest}>.`,
           );
         }
+        await this.checkRPCLimit();
 
         for (const element of latestEvent.data) {
           eventData.push(element);

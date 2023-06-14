@@ -51,6 +51,7 @@ export class AppService {
 
     while (true) {
       const start = new Date().getTime();
+      SuiService.resetQueryCount();
 
       const changedEventStateMap = new Map();
       const obligations =
@@ -249,11 +250,11 @@ export class AppService {
       console.log(
         `[<${new Date()}>]==== loopQueryEvents : <${execTime}> secs ====`,
       );
-      if (execTime < Number(process.env.QUERY_INTERVAL_SECONDS)) {
-        await delay(
-          (Number(process.env.QUERY_INTERVAL_SECONDS) - execTime) * 1000,
-        );
-      }
+      // if (execTime < Number(process.env.QUERY_INTERVAL_SECONDS)) {
+      //   await delay(
+      //     (Number(process.env.QUERY_INTERVAL_SECONDS) - execTime) * 1000,
+      //   );
+      // }
     } //end while
   }
 }
