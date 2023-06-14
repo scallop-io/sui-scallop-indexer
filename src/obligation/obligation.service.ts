@@ -46,6 +46,7 @@ export class ObligationService {
     try {
       const keys = [...obligationMap.keys()];
       const obligationObjs = await SuiService.getSuiKit().getObjects(keys);
+      await suiService.checkRPCLimit();
       for (const obligationObj of obligationObjs) {
         const parentId =
           obligationObj.objectFields['collaterals'].fields.table.fields.id.id;
@@ -84,6 +85,7 @@ export class ObligationService {
     try {
       const keys = [...obligationMap.keys()];
       const obligationObjs = await SuiService.getSuiKit().getObjects(keys);
+      await suiService.checkRPCLimit();
       for (const obligationObj of obligationObjs) {
         const parentId =
           obligationObj.objectFields['debts'].fields.table.fields.id.id;

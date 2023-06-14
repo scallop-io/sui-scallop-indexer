@@ -51,6 +51,7 @@ export class AppService {
 
     while (true) {
       const start = new Date().getTime();
+      SuiService.resetQueryCount();
 
       const changedEventStateMap = new Map();
       const obligations =

@@ -15,12 +15,17 @@ export class SuiService {
   @Inject(EventStateService)
   private readonly _eventStateService: EventStateService;
 
+  static resetQueryCount() {
+    SuiService._queryCount = 0;
+  }
+
   async checkRPCLimit() {
     SuiService._queryCount++;
     if (SuiService._queryCount >= Number(process.env.RPC_QPS)) {
-      SuiService._queryCount = 0;
       // Delay 1 sec to avoid query limit
+      console.debug('Delay 1 sec to avoid query limit');
       await delay(1000);
+      SuiService._queryCount = 0;
     }
   }
 
@@ -121,6 +126,7 @@ export class SuiService {
     const borrowDynamics = new Map<string, BorrowDynamic>();
     try {
       const objs = await SuiService.getSuiKit().getObjects([market]);
+      await this.checkRPCLimit();
       const marketObj = objs[0];
       for (const content of marketObj.objectFields.borrow_dynamics.fields.keys
         .fields.contents) {
@@ -134,6 +140,7 @@ export class SuiService {
               value: content.fields.name,
             },
           });
+        await this.checkRPCLimit();
 
         if ('fields' in dynamicObjects.data.content) {
           borrowDynamics.set(content.fields.name, {
@@ -206,6 +213,7 @@ export class SuiService {
             `[${eventName}]: qurey from cursor <${cursorTxDigest}>.`,
           );
         }
+        await this.checkRPCLimit();
 
         for (const element of latestEvent.data) {
           eventData.push(element);
