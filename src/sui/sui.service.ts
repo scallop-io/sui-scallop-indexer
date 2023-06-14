@@ -32,11 +32,9 @@ export class SuiService {
   public static getSuiKit() {
     try {
       if (!this._suiKit) {
-        const mnemonics = process.env.MNEMONICS;
         const network = <NetworkType>process.env.NETWORK;
         const fullNodeUrl = process.env.RPC_ENDPOINT ?? undefined;
         this._suiKit = new SuiKit({
-          mnemonics,
           networkType: network,
           fullnodeUrl: fullNodeUrl,
         });
@@ -195,7 +193,7 @@ export class SuiService {
               limit: limit,
               order: 'ascending',
             });
-          console.debug(`[${eventName}]: qurey from <start>.`);
+          console.debug(`[${eventName}]: query from <start>.`);
         } else {
           latestEvent =
             await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
@@ -210,7 +208,7 @@ export class SuiService {
               order: 'ascending',
             });
           console.debug(
-            `[${eventName}]: qurey from cursor <${cursorTxDigest}>.`,
+            `[${eventName}]: query from cursor <${cursorTxDigest}>.`,
           );
         }
         await this.checkRPCLimit();
