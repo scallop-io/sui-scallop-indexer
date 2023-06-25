@@ -208,7 +208,7 @@ export class SuiService {
               order: 'ascending',
             });
           console.debug(
-            `[${eventName}]: query from cursor <${cursorTxDigest}>.`,
+            `[${eventName}]: query from cursor <${cursorTxDigest}>, seq<${cursorEventSeq}>`,
           );
         }
         await this.checkRPCLimit();
