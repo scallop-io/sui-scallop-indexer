@@ -52,22 +52,20 @@ export class ObligationService {
           obligationObj.objectFields['collaterals'].fields.table.fields.id.id;
         const collaterals = await suiService.getCollaterals(parentId);
 
-        if (collaterals.length > 0) {
-          const obligation = await this.findByObligation(
-            obligationObj.objectId,
-            session,
-          );
-          obligation.collaterals = collaterals;
+        const obligation = await this.findByObligation(
+          obligationObj.objectId,
+          session,
+        );
+        obligation.collaterals = collaterals;
 
-          const savedObligation = await this.findOneAndUpdateObligation(
-            obligation.obligation_id,
-            obligation,
-            session,
-          );
-          console.log(
-            `[Collaterals]: update <${collaterals.length}> in <${savedObligation.obligation_id}>`,
-          );
-        }
+        const savedObligation = await this.findOneAndUpdateObligation(
+          obligation.obligation_id,
+          obligation,
+          session,
+        );
+        console.log(
+          `[Collaterals]: update <${collaterals.length}> in <${savedObligation.obligation_id}>`,
+        );
       }
     } catch (e) {
       console.error(
@@ -91,22 +89,20 @@ export class ObligationService {
           obligationObj.objectFields['debts'].fields.table.fields.id.id;
         const debts = await suiService.getDebts(parentId);
 
-        if (debts.length > 0) {
-          const obligation = await this.findByObligation(
-            obligationObj.objectId,
-            session,
-          );
-          obligation.debts = debts;
+        const obligation = await this.findByObligation(
+          obligationObj.objectId,
+          session,
+        );
+        obligation.debts = debts;
 
-          const savedObligation = await this.findOneAndUpdateObligation(
-            obligation.obligation_id,
-            obligation,
-            session,
-          );
-          console.log(
-            `[Debts]: update <${debts.length}> in <${savedObligation.obligation_id}>`,
-          );
-        }
+        const savedObligation = await this.findOneAndUpdateObligation(
+          obligation.obligation_id,
+          obligation,
+          session,
+        );
+        console.log(
+          `[Debts]: update <${debts.length}> in <${savedObligation.obligation_id}>`,
+        );
       }
     } catch (e) {
       console.error(`Error caught while updateDebtsInObligationMap(): ${e}`);
