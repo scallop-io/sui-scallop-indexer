@@ -25,6 +25,9 @@ export class BorrowDynamic {
   interestRate: string;
 
   @Prop({ default: '' })
+  interestRateScale: string;
+
+  @Prop({ default: '' })
   lastUpdated: string;
 
   @Prop({ default: now().toString() })

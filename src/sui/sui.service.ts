@@ -145,6 +145,7 @@ export class SuiService {
             coinType: content.fields.name,
             borrowIndex:
               dynamicObjects.data.content.fields.value.fields.borrow_index,
+            interestRateScale: dynamicObjects.data.content.fields.value.fields.interest_rate_scale,
             interestRate:
               dynamicObjects.data.content.fields.value.fields.interest_rate
                 .fields.value,
