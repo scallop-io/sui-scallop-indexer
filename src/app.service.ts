@@ -11,6 +11,7 @@ import { BorrowDynamicService } from './borrow-dynamic/borrow-dynamic.service';
 import { EventStateService } from './eventstate/eventstate.service';
 import { InjectConnection } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
+import { FlashloanService } from './flashloan/flashloan.service';
 
 @Injectable()
 export class AppService {
@@ -41,6 +42,9 @@ export class AppService {
   @Inject(BorrowDynamicService)
   private readonly _borrowDynamicService: BorrowDynamicService;
 
+  @Inject(FlashloanService)
+  private readonly _flashloanService: FlashloanService;
+
   constructor(
     @InjectConnection() private readonly connection: mongoose.Connection,
   ) {}
@@ -52,8 +56,8 @@ export class AppService {
     while (true) {
       const start = new Date().getTime();
       SuiService.resetQueryCount();
-
       const changedEventStateMap = new Map();
+
       const obligations =
         await this._obligationService.getObligationsFromQueryEvent(
           this._suiService,
@@ -111,6 +115,62 @@ export class AppService {
         this._suiService,
         process.env.MARKET_ID,
       );
+
+      // Get & update flashloan events
+      const flashloanEventStateMap = new Map();
+      const borrowFlashloans =
+        await this._flashloanService.getBorrowFlashloansFromQueryEvent(
+          this._suiService,
+          flashloanEventStateMap,
+        );
+
+      const repayFlashloans =
+        await this._flashloanService.getRepayFlashloansFromQueryEvent(
+          this._suiService,
+          flashloanEventStateMap,
+        );
+
+      const flashloanSession = await this.connection.startSession();
+      flashloanSession.startTransaction();
+      try {
+        // update borrow flashloans
+        for (const borrowFlashloan of borrowFlashloans) {
+          await this._flashloanService.create(
+            borrowFlashloan,
+            flashloanSession,
+          );
+        }
+
+        // update repay flashloans
+        for (const repayFlashloan of repayFlashloans) {
+          await this._flashloanService.create(repayFlashloan, flashloanSession);
+        }
+
+        // Update event states
+        for (const eventState of flashloanEventStateMap.values()) {
+          await this._eventStateService.findOneByEventTypeAndUpdateEventState(
+            eventState.eventType,
+            eventState,
+            flashloanSession,
+          );
+          console.log(
+            `[EventState]: update <${eventState.eventType.split('::')[2]}>`,
+          );
+        }
+
+        await flashloanSession.commitTransaction();
+        console.log(
+          `[BorrowFlashLoanEvent]: update <${borrowFlashloans.length}>`,
+        );
+        console.log(
+          `[RepayFlashLoanEvent]: update <${repayFlashloans.length}>`,
+        );
+      } catch (e) {
+        await flashloanSession.abortTransaction();
+        console.error(`Error caught while update Flashloan events: ${e}`);
+      } finally {
+        flashloanSession.endSession();
+      }
 
       const transactionSession = await this.connection.startSession();
       transactionSession.startTransaction();
@@ -250,6 +310,7 @@ export class AppService {
       console.log(
         `[<${new Date()}>]==== loopQueryEvents : <${execTime}> secs ====`,
       );
+
       // if (execTime < Number(process.env.QUERY_INTERVAL_SECONDS)) {
       //   await delay(
       //     (Number(process.env.QUERY_INTERVAL_SECONDS) - execTime) * 1000,

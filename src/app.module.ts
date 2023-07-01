@@ -12,16 +12,18 @@ import { BorrowDynamicModule } from './borrow-dynamic/borrow-dynamic.module';
 import * as process from 'process';
 import * as dotenv from 'dotenv';
 import { EventStateModule } from './eventstate/eventstate.module';
+import { FlashloanModule } from './flashloan/flashloan.module';
 
 dotenv.config();
 
 @Module({
   imports: [
     MongooseModule.forRoot(
-      process.env.MONGO_URI || 'mongodb://localhost:27017/Scallop', {
+      process.env.MONGO_URI || 'mongodb://localhost:27017/Scallop',
+      {
         // if the replica is only 1, set directConnection to `true`
         directConnection: false,
-      }
+      },
     ),
     SuiModule,
     EventStateModule,
@@ -32,6 +34,7 @@ dotenv.config();
     RepayModule,
     LiquidateModule,
     BorrowDynamicModule,
+    FlashloanModule,
   ],
   providers: [AppService],
 })
