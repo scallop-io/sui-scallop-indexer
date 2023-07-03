@@ -1,6 +1,6 @@
 import { PaginatedEvents } from '@mysten/sui.js';
 import { Inject, Injectable } from '@nestjs/common';
-import { NetworkType, SuiKit } from '@scallop-dao/sui-kit';
+import { NetworkType, SuiKit } from '@scallop-io/sui-kit';
 import { BorrowDynamic } from 'src/borrow-dynamic/borrow-dynamic.schema';
 import { delay } from 'src/common/utils/time';
 import { EventState } from 'src/eventstate/eventstate.schema';
@@ -145,7 +145,9 @@ export class SuiService {
             coinType: content.fields.name,
             borrowIndex:
               dynamicObjects.data.content.fields.value.fields.borrow_index,
-            interestRateScale: dynamicObjects.data.content.fields.value.fields.interest_rate_scale,
+            interestRateScale:
+              dynamicObjects.data.content.fields.value.fields
+                .interest_rate_scale,
             interestRate:
               dynamicObjects.data.content.fields.value.fields.interest_rate
                 .fields.value,
@@ -251,5 +253,23 @@ export class SuiService {
       );
     }
     return eventObjects;
+  }
+
+  async getObligationVersion(obligation_id: string): Promise<string> {
+    const obj = await SuiService.getSuiKit()
+      .provider()
+      .getObject({
+        id: obligation_id,
+        options: {
+          showContent: true,
+          showBcs: true,
+          showOwner: true,
+        },
+      });
+    await this.checkRPCLimit();
+    // console.log(obj.data.owner);
+    const version = obj.data.owner['Shared']['initial_shared_version'];
+
+    return version;
   }
 }
