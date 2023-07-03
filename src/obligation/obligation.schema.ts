@@ -46,6 +46,9 @@ export class Obligation {
   sender?: string;
 
   @Prop()
+  version?: string;
+
+  @Prop()
   timestampMs?: string;
 
   @Prop({ default: [] })

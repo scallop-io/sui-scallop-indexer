@@ -119,11 +119,15 @@ export class ObligationService {
       process.env.EVENT_OBLIGATION_CREATED,
       eventStateMap,
       async (item) => {
+        const version = await suiService.getObligationVersion(
+          item.parsedJson.obligation,
+        );
         return {
           obligation_id: item.parsedJson.obligation,
           obligation_key: item.parsedJson.obligation_key,
           sender: item.parsedJson.sender,
           timestampMs: item.timestampMs,
+          version: version,
         };
       },
     );
