@@ -20,12 +20,12 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
-    "@mysten/sui.js": "^0.32.2",
+    "@mysten/sui.js": "^0.36.0",
+    "@scallop-io/sui-kit": "0.37.1",
     "@nestjs/common": "^9.0.0",
     "@nestjs/core": "^9.0.0",
     "@nestjs/mongoose": "^9.2.2",
     "@nestjs/platform-express": "^9.0.0",
-    "@scallop-dao/sui-kit": "^0.32.11",
     "dotenv": "^16.0.3",
     "mongoose": "^7.1.0",
     "reflect-metadata": "^0.1.13",
