@@ -1,6 +1,7 @@
 import { PaginatedEvents } from '@mysten/sui.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { NetworkType, SuiKit } from '@scallop-io/sui-kit';
+import axios from 'axios';
 import { BorrowDynamic } from 'src/borrow-dynamic/borrow-dynamic.schema';
 import { delay } from 'src/common/utils/time';
 import { EventState } from 'src/eventstate/eventstate.schema';
@@ -11,6 +12,147 @@ import { Collateral, Debt } from 'src/obligation/obligation.schema';
 export class SuiService {
   private static _suiKit: SuiKit;
   private static _queryCount = 0;
+
+  private API_URL = process.env.API_URL || 'https://sui.api.scallop.io/';
+  private API_KEY = process.env.API_KEY || 'scalloptestapikey';
+  private ADDRESSES_ID = process.env.ADDRESSES_ID || '6462a088a7ace142bb6d7e9b';
+  private NETWORK = process.env.NETWORK || 'testnet';
+
+  private MARKET_ID =
+    process.env.MARKET_ID ||
+    '0x91b18f2f0858d3da3b5d48010e5bb59d51e033bcc673e040bd3bdec2b232b297';
+  private PROTOCOL_ID =
+    process.env.PROTOCOL_ID ||
+    '0xa9cdb9d8e80465c75dcdad061cf1d462a9cf662da071412ca178d579d8df2855';
+
+  private _addresses = undefined;
+  private _protocolId = undefined;
+  private _marketId = undefined;
+  // event id
+  private _obligationCreatedEventId = undefined;
+  private _collateralDepositEventId = undefined;
+  private _collateralWithdrawEventId = undefined;
+  private _borrowEventId = undefined;
+  private _repayEventId = undefined;
+  private _liquidateEventId = undefined;
+  private _flashloanBorrowEventId = undefined;
+  private _flashloanRepayEventId = undefined;
+
+  private async fetchAddressesFromAPI() {
+    let addresses = undefined;
+    try {
+      const response = await axios.get(
+        this.API_URL + 'addresses/' + this.ADDRESSES_ID,
+        {
+          headers: {
+            'api-key': this.API_KEY,
+          },
+        },
+      );
+      addresses = response.data;
+
+      console.log('[Addresses]: fetchAddressesFromAPI() success');
+    } catch (e) {
+      console.error('Error caught while fetchAddressesFromAPI() ', e);
+    }
+    return addresses;
+  }
+
+  private async getAddresses() {
+    if (!this._addresses) {
+      this._addresses = await this.fetchAddressesFromAPI();
+    }
+    return this._addresses;
+  }
+
+  public async getMarketId() {
+    if (!this._marketId) {
+      const address = await this.getAddresses();
+      if (!this._addresses) {
+        this._marketId = this.MARKET_ID;
+      } else {
+        this._marketId = address[this.NETWORK]['core']['market'];
+      }
+    }
+    return this._marketId;
+  }
+
+  private async getProtocolId() {
+    if (!this._protocolId) {
+      const address = await this.getAddresses();
+      if (!this._addresses) {
+        return this.PROTOCOL_ID;
+      } else {
+        this._protocolId =
+          address[this.NETWORK]['core']['packages']['protocol']['id'];
+      }
+    }
+    return this._protocolId;
+  }
+
+  public async getObligationCreatedEventId() {
+    if (!this._obligationCreatedEventId) {
+      const protocol = await this.getProtocolId();
+      this._obligationCreatedEventId = `${protocol}::open_obligation::ObligationCreatedEvent`;
+    }
+    return this._obligationCreatedEventId;
+  }
+
+  public async getCollateralDepositEventId() {
+    if (!this._collateralDepositEventId) {
+      const protocol = await this.getProtocolId();
+      this._collateralDepositEventId = `${protocol}::deposit_collateral::CollateralDepositEvent`;
+    }
+    return this._collateralDepositEventId;
+  }
+
+  public async getCollateralWithdrawEventId() {
+    if (!this._collateralWithdrawEventId) {
+      const protocol = await this.getProtocolId();
+      this._collateralWithdrawEventId = `${protocol}::withdraw_collateral::CollateralWithdrawEvent`;
+    }
+    return this._collateralWithdrawEventId;
+  }
+
+  public async getBorrowEventId() {
+    if (!this._borrowEventId) {
+      const protocol = await this.getProtocolId();
+      this._borrowEventId = `${protocol}::borrow::BorrowEvent`;
+    }
+    return this._borrowEventId;
+  }
+
+  public async getRepayEventId() {
+    if (!this._repayEventId) {
+      const protocol = await this.getProtocolId();
+      this._repayEventId = `${protocol}::repay::RepayEvent`;
+    }
+    return this._repayEventId;
+  }
+
+  public async getLiquidateEventId() {
+    if (!this._liquidateEventId) {
+      const protocol = await this.getProtocolId();
+      this._liquidateEventId = `${protocol}::liquidate::LiquidateEvent`;
+    }
+    return this._liquidateEventId;
+  }
+
+  public async getFlashloanBorrowEventId() {
+    if (!this._flashloanBorrowEventId) {
+      const protocol = await this.getProtocolId();
+      this._flashloanBorrowEventId = `${protocol}::flash_loan::BorrowFlashLoanEvent`;
+    }
+    return this._flashloanBorrowEventId;
+  }
+
+  public async getFlashloanRepayEventId() {
+    if (!this._flashloanRepayEventId) {
+      const protocol = await this.getProtocolId();
+      this._flashloanRepayEventId = `${protocol}::flash_loan::RepayFlashLoanEvent`;
+    }
+    return this._flashloanRepayEventId;
+  }
 
   @Inject(EventStateService)
   private readonly _eventStateService: EventStateService;
@@ -249,7 +391,8 @@ export class SuiService {
       }
     } catch (e) {
       console.error(
-        `Error caught while getEventsFromQuery() for ${eventType}: ${e}`,
+        `Error caught while getEventsFromQuery() for ${eventType}:`,
+        e,
       );
     }
     return eventObjects;

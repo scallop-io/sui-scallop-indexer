@@ -115,8 +115,10 @@ export class ObligationService {
     suiService: SuiService,
     eventStateMap: Map<string, EventState>,
   ): Promise<any[]> {
+    const eventId = await suiService.getObligationCreatedEventId();
     return await suiService.getEventsFromQuery(
-      process.env.EVENT_OBLIGATION_CREATED,
+      // process.env.EVENT_OBLIGATION_CREATED,
+      eventId,
       eventStateMap,
       async (item) => {
         const version = await suiService.getObligationVersion(

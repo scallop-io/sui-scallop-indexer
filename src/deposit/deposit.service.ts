@@ -25,8 +25,10 @@ export class DepositService {
     suiService: SuiService,
     eventStateMap: Map<string, EventState>,
   ): Promise<any[]> {
+    const eventId = await suiService.getCollateralDepositEventId();
     return await suiService.getEventsFromQuery(
-      process.env.EVENT_COLLATERAL_DEPOSIT,
+      // process.env.EVENT_COLLATERAL_DEPOSIT,
+      eventId,
       eventStateMap,
       async (item) => {
         return {

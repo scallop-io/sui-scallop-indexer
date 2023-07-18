@@ -13,6 +13,7 @@ import * as process from 'process';
 import * as dotenv from 'dotenv';
 import { EventStateModule } from './eventstate/eventstate.module';
 import { FlashloanModule } from './flashloan/flashloan.module';
+import { StatisticModule } from './statistic/statistic.module';
 
 dotenv.config();
 
@@ -35,6 +36,7 @@ dotenv.config();
     LiquidateModule,
     BorrowDynamicModule,
     FlashloanModule,
+    StatisticModule,
   ],
   providers: [AppService],
 })
