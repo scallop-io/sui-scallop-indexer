@@ -45,28 +45,39 @@ export class ObligationService {
   ): Promise<void> {
     try {
       const keys = [...obligationMap.keys()];
-      const obligationObjs = await SuiService.getSuiKit().getObjects(keys);
-      await suiService.checkRPCLimit();
-      for (const obligationObj of obligationObjs) {
-        const parentId =
-          obligationObj.objectFields['collaterals'].fields.table.fields.id.id;
-        const collaterals = await suiService.getCollaterals(parentId);
+      while (keys.length) {
+        // Get the first batch(50 keys), and update 'keys' to contain the remaining keys
+        const currentBatchOfKeys = keys.splice(
+          0,
+          Math.min(suiService.SUI_QUERY_LIMIT, keys.length),
+        );
 
-        const obligation = await this.findByObligation(
-          obligationObj.objectId,
-          session,
+        // const obligationObjs = await SuiService.getSuiKit().getObjects(keys);
+        const obligationObjs = await SuiService.getSuiKit().getObjects(
+          currentBatchOfKeys,
         );
-        obligation.collaterals = collaterals;
+        await suiService.checkRPCLimit();
+        for (const obligationObj of obligationObjs) {
+          const parentId =
+            obligationObj.objectFields['collaterals'].fields.table.fields.id.id;
+          const collaterals = await suiService.getCollaterals(parentId);
 
-        const savedObligation = await this.findOneAndUpdateObligation(
-          obligation.obligation_id,
-          obligation,
-          session,
-        );
-        console.log(
-          `[Collaterals]: update <${collaterals.length}> in <${savedObligation.obligation_id}>`,
-        );
-      }
+          const obligation = await this.findByObligation(
+            obligationObj.objectId,
+            session,
+          );
+          obligation.collaterals = collaterals;
+
+          const savedObligation = await this.findOneAndUpdateObligation(
+            obligation.obligation_id,
+            obligation,
+            session,
+          );
+          console.log(
+            `[Collaterals]: update <${collaterals.length}> in <${savedObligation.obligation_id}>`,
+          );
+        }
+      } //end while
     } catch (e) {
       console.error(
         `Error caught while updateCollateralsInObligationMap(): ${e}`,
@@ -82,27 +93,36 @@ export class ObligationService {
   ): Promise<void> {
     try {
       const keys = [...obligationMap.keys()];
-      const obligationObjs = await SuiService.getSuiKit().getObjects(keys);
-      await suiService.checkRPCLimit();
-      for (const obligationObj of obligationObjs) {
-        const parentId =
-          obligationObj.objectFields['debts'].fields.table.fields.id.id;
-        const debts = await suiService.getDebts(parentId);
+      while (keys.length) {
+        // Get the first batch(50 keys), and update 'keys' to contain the remaining keys
+        const currentBatchOfKeys = keys.splice(
+          0,
+          Math.min(suiService.SUI_QUERY_LIMIT, keys.length),
+        );
+        const obligationObjs = await SuiService.getSuiKit().getObjects(
+          currentBatchOfKeys,
+        );
+        await suiService.checkRPCLimit();
+        for (const obligationObj of obligationObjs) {
+          const parentId =
+            obligationObj.objectFields['debts'].fields.table.fields.id.id;
+          const debts = await suiService.getDebts(parentId);
 
-        const obligation = await this.findByObligation(
-          obligationObj.objectId,
-          session,
-        );
-        obligation.debts = debts;
+          const obligation = await this.findByObligation(
+            obligationObj.objectId,
+            session,
+          );
+          obligation.debts = debts;
 
-        const savedObligation = await this.findOneAndUpdateObligation(
-          obligation.obligation_id,
-          obligation,
-          session,
-        );
-        console.log(
-          `[Debts]: update <${debts.length}> in <${savedObligation.obligation_id}>`,
-        );
+          const savedObligation = await this.findOneAndUpdateObligation(
+            obligation.obligation_id,
+            obligation,
+            session,
+          );
+          console.log(
+            `[Debts]: update <${debts.length}> in <${savedObligation.obligation_id}>`,
+          );
+        } //end while
       }
     } catch (e) {
       console.error(`Error caught while updateDebtsInObligationMap(): ${e}`);
@@ -133,5 +153,22 @@ export class ObligationService {
         };
       },
     );
+  }
+
+  async findAll(): Promise<Obligation[]> {
+    return this.obligationModel.find().exec();
+  }
+
+  async findOne(id: string): Promise<Obligation> {
+    return this.obligationModel.findById(id).exec();
+  }
+
+  // findOneByObligationId
+  async findByObligationId(id: string): Promise<Obligation> {
+    return this.obligationModel.findOne({ obligation_id: id }).exec();
+  }
+
+  async findObligationsBySender(sender: string): Promise<Obligation[]> {
+    return this.obligationModel.find({ sender: sender }).exec();
   }
 }

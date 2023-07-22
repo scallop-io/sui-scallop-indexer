@@ -12,6 +12,9 @@ import { Collateral, Debt } from 'src/obligation/obligation.schema';
 export class SuiService {
   private static _suiKit: SuiKit;
   private static _queryCount = 0;
+  public SUI_QUERY_LIMIT = Number(process.env.QUERY_LIMIT) || 50;
+  public RPC_QPS_LIMIT = Number(process.env.RPC_QPS) || 100;
+  public RPC_DELAY_SECONDS = Number(process.env.RPC_DELAY_SECONDS) || 1;
 
   private API_URL = process.env.API_URL || 'https://sui.api.scallop.io/';
   private API_KEY = process.env.API_KEY || 'scalloptestapikey';
@@ -24,10 +27,12 @@ export class SuiService {
   private PROTOCOL_ID =
     process.env.PROTOCOL_ID ||
     '0xa9cdb9d8e80465c75dcdad061cf1d462a9cf662da071412ca178d579d8df2855';
+  private COINS = ['BTC', 'ETH', 'USDT', 'USDC', 'SUI'];
 
   private _addresses = undefined;
   private _protocolId = undefined;
   private _marketId = undefined;
+
   // event id
   private _obligationCreatedEventId = undefined;
   private _collateralDepositEventId = undefined;
@@ -37,6 +42,9 @@ export class SuiService {
   private _liquidateEventId = undefined;
   private _flashloanBorrowEventId = undefined;
   private _flashloanRepayEventId = undefined;
+
+  private _mintEventId = undefined;
+  private _redeemEventId = undefined;
 
   private async fetchAddressesFromAPI() {
     let addresses = undefined;
@@ -75,6 +83,10 @@ export class SuiService {
       }
     }
     return this._marketId;
+  }
+
+  public getCoinTypes() {
+    return this.COINS;
   }
 
   private async getProtocolId() {
@@ -154,6 +166,22 @@ export class SuiService {
     return this._flashloanRepayEventId;
   }
 
+  public async getMintEventId() {
+    if (!this._mintEventId) {
+      const protocol = await this.getProtocolId();
+      this._mintEventId = `${protocol}::mint::MintEvent`;
+    }
+    return this._mintEventId;
+  }
+
+  public async getRedeemEventId() {
+    if (!this._redeemEventId) {
+      const protocol = await this.getProtocolId();
+      this._redeemEventId = `${protocol}::redeem::RedeemEvent`;
+    }
+    return this._redeemEventId;
+  }
+
   @Inject(EventStateService)
   private readonly _eventStateService: EventStateService;
 
@@ -163,10 +191,11 @@ export class SuiService {
 
   async checkRPCLimit() {
     SuiService._queryCount++;
-    if (SuiService._queryCount >= Number(process.env.RPC_QPS)) {
+
+    if (SuiService._queryCount >= this.RPC_QPS_LIMIT) {
       // Delay 1 sec to avoid query limit
-      console.debug('Delay 1 sec to avoid query limit');
-      await delay(1000);
+      console.debug(`Delay ${this.RPC_DELAY_SECONDS} sec to avoid query limit`);
+      await delay(this.RPC_DELAY_SECONDS);
       SuiService._queryCount = 0;
     }
   }
@@ -308,10 +337,10 @@ export class SuiService {
     eventType: string,
     eventStateMap: Map<string, EventState>,
     createCallback: (item: any) => Promise<any>,
-    limit = Number(process.env.QUERY_LIMIT),
   ): Promise<any[]> {
     const eventObjects = [];
     try {
+      const startTime = new Date().getTime();
       // Find if there is cursor stored in DB
       const eventName = eventType.split('::')[2];
       const eventState = await this._eventStateService.findByEventType(
@@ -335,7 +364,7 @@ export class SuiService {
               query: {
                 MoveEventType: eventType,
               },
-              limit: limit,
+              limit: this.SUI_QUERY_LIMIT,
               order: 'ascending',
             });
           console.debug(`[${eventName}]: query from <start>.`);
@@ -349,7 +378,7 @@ export class SuiService {
                 txDigest: cursorTxDigest,
                 eventSeq: cursorEventSeq,
               },
-              limit: limit,
+              limit: this.SUI_QUERY_LIMIT,
               order: 'ascending',
             });
           console.debug(
@@ -378,7 +407,11 @@ export class SuiService {
         eventObjects.push(newEvent);
         // console.log(`[${eventName}]: create <${newEvent.obligation_id}>`);
       }
-      console.log(`[${eventName}]: create <${eventObjects.length}> events.`);
+      const endTime = new Date().getTime();
+      const execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[${eventName}]: create <${eventObjects.length}> events, <${execTime}> sec.`,
+      );
 
       // Save Next Cursor data
       if (eventObjects.length > 0) {
@@ -414,5 +447,44 @@ export class SuiService {
     const version = obj.data.owner['Shared']['initial_shared_version'];
 
     return version;
+  }
+
+  async getSuiName(address: string): Promise<string> {
+    let suiName = address;
+    // get default suiNS
+    const suiNameObj = await SuiService.getSuiKit()
+      .provider()
+      .resolveNameServiceNames({
+        address: address,
+      });
+
+    if (suiNameObj.data.length > 0) {
+      suiName = suiNameObj.data[0];
+    } else {
+      let packageId =
+        '0xd22b24490e0bae52676651b4f56660a5ff8022a2576e0089f79b3c88d44e08f0';
+      if (process.env.NETWORK === 'testnet') {
+        packageId =
+          '0x701b8ca1c40f11288a1ed2de0a9a2713e972524fbab748a7e6c137225361653f';
+      }
+      const suinsRegistration = await SuiService.getSuiKit()
+        .provider()
+        .getOwnedObjects({
+          owner: address,
+          filter: {
+            StructType: packageId + '::suins_registration::SuinsRegistration',
+          },
+          options: {
+            showContent: true,
+            showDisplay: true,
+          },
+        });
+      if (suinsRegistration.data.length > 0) {
+        // set 1st suiNS as default
+        suiName = suinsRegistration.data[0].data.display.data['name'];
+      }
+    }
+
+    return suiName;
   }
 }

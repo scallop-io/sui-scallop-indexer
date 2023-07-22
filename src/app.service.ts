@@ -13,6 +13,8 @@ import { InjectConnection } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
 import { FlashloanService } from './flashloan/flashloan.service';
 import { StatisticService } from './statistic/statistic.service';
+import { MintService } from './mint/mint.service';
+import { RedeemService } from './redeem/redeem.service';
 
 @Injectable()
 export class AppService {
@@ -48,6 +50,12 @@ export class AppService {
 
   @Inject(StatisticService)
   private readonly _statisticService: StatisticService;
+
+  @Inject(MintService)
+  private readonly _mintService: MintService;
+
+  @Inject(RedeemService)
+  private readonly _redeemService: RedeemService;
 
   constructor(
     @InjectConnection() private readonly connection: mongoose.Connection,
@@ -114,6 +122,7 @@ export class AppService {
     transactionSession.startTransaction();
     try {
       // update obligations
+      let startTime = new Date().getTime();
       const changedObligationMap = new Map();
       for (const obligation of obligations) {
         const updatedObligation =
@@ -128,9 +137,14 @@ export class AppService {
         );
         // console.debug(`[Obligations]: update <${obligation.obligation_id}>`);
       }
-      console.log(`[Obligations]: update <${obligations.length}> enents`);
+      let endTime = new Date().getTime();
+      let execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[Obligations]: update <${obligations.length}>, <${execTime}> secs.`,
+      );
 
       // update deposits
+      startTime = new Date().getTime();
       for (const deposit of deposits) {
         let obligation = changedObligationMap.get(deposit.obligation_id);
         if (obligation === undefined) {
@@ -143,9 +157,14 @@ export class AppService {
         deposit.obligation = obligation;
         await this._depositService.create(deposit, transactionSession);
       }
-      console.log(`[Deposits]: update <${deposits.length}>`);
+      endTime = new Date().getTime();
+      execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[Deposits]: update <${deposits.length}>, <${execTime}> secs.`,
+      );
 
       // update withdraws
+      startTime = new Date().getTime();
       for (const withdraw of withdraws) {
         let obligation = changedObligationMap.get(withdraw.obligation_id);
         if (obligation === undefined) {
@@ -158,9 +177,14 @@ export class AppService {
         withdraw.obligation = obligation;
         await this._withdrawService.create(withdraw, transactionSession);
       }
-      console.log(`[Withdraws]: update <${withdraws.length}>`);
+      endTime = new Date().getTime();
+      execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[Withdraws]: update <${withdraws.length}>, <${execTime}> secs.`,
+      );
 
       // update borrows
+      startTime = new Date().getTime();
       for (const borrow of borrows) {
         let obligation = changedObligationMap.get(borrow.obligation_id);
         if (obligation === undefined) {
@@ -173,9 +197,12 @@ export class AppService {
         borrow.obligation = obligation;
         await this._borrowService.create(borrow, transactionSession);
       }
-      console.log(`[Borrows]: update <${borrows.length}>`);
+      endTime = new Date().getTime();
+      execTime = (endTime - startTime) / 1000;
+      console.log(`[Borrows]: update <${borrows.length}>, <${execTime}> secs.`);
 
       // update repays
+      startTime = new Date().getTime();
       for (const repay of repays) {
         let obligation = changedObligationMap.get(repay.obligation_id);
         if (obligation === undefined) {
@@ -188,9 +215,12 @@ export class AppService {
         repay.obligation = obligation;
         await this._repayService.create(repay, transactionSession);
       }
-      console.log(`[Repays]: update <${repays.length}>`);
+      endTime = new Date().getTime();
+      execTime = (endTime - startTime) / 1000;
+      console.log(`[Repays]: update <${repays.length}>, <${execTime}> secs.`);
 
       // update liquidates
+      startTime = new Date().getTime();
       for (const liquidate of liquidates) {
         let obligation = changedObligationMap.get(liquidate.obligation_id);
         if (obligation === undefined) {
@@ -203,9 +233,14 @@ export class AppService {
         liquidate.obligation = obligation;
         await this._liquidateService.create(liquidate, transactionSession);
       }
-      console.log(`[Liquidates]: update <${liquidates.length}>`);
+      endTime = new Date().getTime();
+      execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[Liquidates]: update <${liquidates.length}>, <${execTime}> secs.`,
+      );
 
       // Update obligations with collaterals and debts changed
+      startTime = new Date().getTime();
       if (hasCollateralsChanged) {
         await this._obligationService.updateCollateralsInObligationMap(
           this._suiService,
@@ -214,7 +249,13 @@ export class AppService {
         );
         hasCollateralsChanged = false;
       }
+      endTime = new Date().getTime();
+      execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[Collaterals]: updateCollateralsInObligationMap, <${execTime}> secs.`,
+      );
 
+      startTime = new Date().getTime();
       if (hasDebtsChanged) {
         await this._obligationService.updateDebtsInObligationMap(
           this._suiService,
@@ -223,6 +264,9 @@ export class AppService {
         );
         hasDebtsChanged = false;
       }
+      endTime = new Date().getTime();
+      execTime = (endTime - startTime) / 1000;
+      console.log(`[Debts]: updateDebtsInObligationMap, <${execTime}> secs.`);
 
       // Update event states
       for (const eventState of changedEventStateMap.values()) {
@@ -261,6 +305,7 @@ export class AppService {
 
     const flashloanSession = await this.connection.startSession();
     flashloanSession.startTransaction();
+    const startTime = new Date().getTime();
     try {
       // update borrow flashloans
       for (const borrowFlashloan of borrowFlashloans) {
@@ -285,15 +330,90 @@ export class AppService {
       }
 
       await flashloanSession.commitTransaction();
+      const endTime = new Date().getTime();
+      const execTime = (endTime - startTime) / 1000;
       console.log(
-        `[BorrowFlashLoanEvent]: update <${borrowFlashloans.length}>`,
+        `[FlashLoanEvent]: update Borrow<${borrowFlashloans.length}>, Repay<${repayFlashloans.length}>, <${execTime}> secs`,
       );
-      console.log(`[RepayFlashLoanEvent]: update <${repayFlashloans.length}>`);
     } catch (e) {
       await flashloanSession.abortTransaction();
       console.error('Error caught while update Flashloan events:', e);
     } finally {
       flashloanSession.endSession();
+    }
+  }
+
+  async updateLendingRelatedEvents(): Promise<void> {
+    // Get & update lending events
+    const lendingEventStateMap = new Map();
+    const mints = await this._mintService.getMintsFromQueryEvent(
+      this._suiService,
+      lendingEventStateMap,
+    );
+
+    const redeems = await this._redeemService.getRedeemsFromQueryEvent(
+      this._suiService,
+      lendingEventStateMap,
+    );
+
+    const lendingSession = await this.connection.startSession();
+    lendingSession.startTransaction();
+    try {
+      // update mints
+      let startTime = new Date().getTime();
+      for (const mint of mints) {
+        await this._mintService.create(mint, lendingSession);
+      }
+      let endTime = new Date().getTime();
+      let execTime = (endTime - startTime) / 1000;
+      console.log(`[MintEvent]: update <${mints.length}>, <${execTime}> secs`);
+
+      // update redeems
+      startTime = new Date().getTime();
+      for (const redeem of redeems) {
+        await this._redeemService.create(redeem, lendingSession);
+      }
+      endTime = new Date().getTime();
+      execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[RedeemEvent]: update <${redeems.length}>, <${execTime}> secs`,
+      );
+
+      // Update event states
+      for (const eventState of lendingEventStateMap.values()) {
+        await this._eventStateService.findOneByEventTypeAndUpdateEventState(
+          eventState.eventType,
+          eventState,
+          lendingSession,
+        );
+        console.log(
+          `[EventState]: update <${eventState.eventType.split('::')[2]}>`,
+        );
+      }
+
+      await lendingSession.commitTransaction();
+
+      startTime = new Date().getTime();
+      const mintSenders = [...new Set(mints.map((mint) => mint.sender))];
+      const redeemSenders = [
+        ...new Set(redeems.map((redeem) => redeem.sender)),
+      ];
+      const uniqueSenders = [...new Set([...mintSenders, ...redeemSenders])];
+      // console.log(`[UniqueSenders]: <${uniqueSenders.length}>`);
+
+      const updateSupplies = await this._statisticService.updateSupplyBalance(
+        uniqueSenders,
+      );
+      endTime = new Date().getTime();
+      execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[Supply]: Update <${updateSupplies.length}>, <${execTime}> secs`,
+      );
+    } catch (e) {
+      await lendingSession.abortTransaction();
+      console.error('Error caught while update Lending events:', e);
+    } finally {
+      lendingSession.endSession();
     }
   }
 
@@ -315,8 +435,11 @@ export class AppService {
       // Get & update flashloan events
       await this.updateFlashloanRelatedEvents();
 
-      // Get & update leaderboard
-      await this._statisticService.updateLatestLeaderboard();
+      // Get & update lending events
+      await this.updateLendingRelatedEvents();
+
+      // Get & update leaderboard (default 60 seconds)
+      this._statisticService.updateLatestLeaderboard();
 
       const end = new Date().getTime();
       const execTime = (end - start) / 1000;

@@ -14,6 +14,9 @@ import * as dotenv from 'dotenv';
 import { EventStateModule } from './eventstate/eventstate.module';
 import { FlashloanModule } from './flashloan/flashloan.module';
 import { StatisticModule } from './statistic/statistic.module';
+import { MintModule } from './mint/mint.module';
+import { RedeemModule } from './redeem/redeem.module';
+import { SupplyModule } from './supply/supply.module';
 
 dotenv.config();
 
@@ -37,6 +40,9 @@ dotenv.config();
     BorrowDynamicModule,
     FlashloanModule,
     StatisticModule,
+    MintModule,
+    RedeemModule,
+    SupplyModule,
   ],
   providers: [AppService],
 })
