@@ -337,6 +337,7 @@ export class SuiService {
     eventType: string,
     eventStateMap: Map<string, EventState>,
     createCallback: (item: any) => Promise<any>,
+    pageLimit = 10,
   ): Promise<any[]> {
     const eventObjects = [];
     try {
@@ -357,6 +358,7 @@ export class SuiService {
       let hasNextPage = true;
       let latestEvent: PaginatedEvents;
       const eventData = [];
+      let pageCount = 0;
       while (hasNextPage) {
         if (cursorTxDigest === undefined || cursorEventSeq === undefined) {
           latestEvent =
@@ -398,6 +400,10 @@ export class SuiService {
         if (hasNextPage === true) {
           cursorTxDigest = latestEvent.nextCursor.txDigest;
           cursorEventSeq = latestEvent.nextCursor.eventSeq;
+        }
+        pageCount++;
+        if (pageCount >= pageLimit) {
+          break;
         }
       } //end of while
 

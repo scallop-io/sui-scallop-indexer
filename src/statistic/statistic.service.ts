@@ -525,7 +525,10 @@ export class StatisticService {
     return supplyLeadboard;
   }
 
-  async updateSupplyBalance(senderList: string[]): Promise<any[]> {
+  async updateSupplyBalance(
+    senderList: string[],
+    session: mongoose.ClientSession | null = null,
+  ): Promise<any[]> {
     const supplies = [];
 
     try {
@@ -580,6 +583,7 @@ export class StatisticService {
           await this._supplyService.findOneBySenderAndUpdateSupply(
             senderId,
             supply,
+            session,
           );
         // console.log(supplyObj);
         supplies.push(supplyObj);

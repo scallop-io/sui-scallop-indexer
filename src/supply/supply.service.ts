@@ -42,12 +42,14 @@ export class SupplyService {
   async findOneBySenderAndUpdateSupply(
     sender: string,
     supply: Supply,
+    session: mongoose.ClientSession | null = null,
   ): Promise<Supply> {
     return this.supplyModel
       .findOneAndUpdate({ sender: sender }, supply, {
         upsert: true,
         new: true,
       })
+      .session(session)
       .exec();
   }
 }

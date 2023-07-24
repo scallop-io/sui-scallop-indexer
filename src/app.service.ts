@@ -346,6 +346,7 @@ export class AppService {
   async updateLendingRelatedEvents(): Promise<void> {
     // Get & update lending events
     const lendingEventStateMap = new Map();
+
     const mints = await this._mintService.getMintsFromQueryEvent(
       this._suiService,
       lendingEventStateMap,
@@ -358,6 +359,7 @@ export class AppService {
 
     const lendingSession = await this.connection.startSession();
     lendingSession.startTransaction();
+    const updatingSession = await this.connection.startSession();
     try {
       // update mints
       let startTime = new Date().getTime();
@@ -390,7 +392,6 @@ export class AppService {
           `[EventState]: update <${eventState.eventType.split('::')[2]}>`,
         );
       }
-
       await lendingSession.commitTransaction();
 
       startTime = new Date().getTime();
@@ -401,19 +402,24 @@ export class AppService {
       const uniqueSenders = [...new Set([...mintSenders, ...redeemSenders])];
       // console.log(`[UniqueSenders]: <${uniqueSenders.length}>`);
 
+      updatingSession.startTransaction();
       const updateSupplies = await this._statisticService.updateSupplyBalance(
         uniqueSenders,
+        updatingSession,
       );
+      await updatingSession.commitTransaction();
       endTime = new Date().getTime();
       execTime = (endTime - startTime) / 1000;
       console.log(
         `[Supply]: Update <${updateSupplies.length}>, <${execTime}> secs`,
       );
     } catch (e) {
-      await lendingSession.abortTransaction();
+      if (lendingSession) await lendingSession.abortTransaction();
+      if (updatingSession) await updatingSession.abortTransaction();
       console.error('Error caught while update Lending events:', e);
     } finally {
       lendingSession.endSession();
+      updatingSession.endSession();
     }
   }
 
@@ -439,7 +445,7 @@ export class AppService {
       await this.updateLendingRelatedEvents();
 
       // Get & update leaderboard (default 60 seconds)
-      this._statisticService.updateLatestLeaderboard();
+      // this._statisticService.updateLatestLeaderboard();
 
       const end = new Date().getTime();
       const execTime = (end - start) / 1000;
