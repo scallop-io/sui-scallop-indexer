@@ -171,4 +171,180 @@ export class ObligationService {
   async findObligationsBySender(sender: string): Promise<Obligation[]> {
     return this.obligationModel.find({ sender: sender }).exec();
   }
+
+  async findDistinctCoins(field: string): Promise<any> {
+    return await this.obligationModel
+      .aggregate([
+        {
+          $unwind: `$${field}`,
+        },
+        {
+          $group: {
+            _id: `$${field}.asset`,
+            coinCount: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            coinType: '$_id',
+            coinCount: 1,
+            _id: 0,
+          },
+        },
+      ])
+      .exec();
+  }
+
+  async findDistinctBorrowCoins(): Promise<any> {
+    return this.findDistinctCoins('debts');
+  }
+
+  async findDistinctCollateralsCoins(): Promise<any> {
+    return this.findDistinctCoins('collaterals');
+  }
+
+  async getTopValueSendersByCoinType(
+    field: string,
+    coinType: string,
+    coinPrice: number,
+    multiple: number,
+    limit = 1000,
+  ): Promise<any> {
+    const multipleValue = coinPrice * multiple;
+    return await this.obligationModel
+      .aggregate([
+        {
+          $unwind: `$${field}`,
+        },
+        {
+          $match: {
+            [`${field}.asset`]: coinType,
+          },
+        },
+        {
+          $group: {
+            _id: '$sender',
+            senderCoinType: { $first: `$${field}.asset` },
+            senderCoinAmount: { $sum: { $toDouble: `$${field}.amount` } },
+            senderCoinValue: {
+              $sum: {
+                $multiply: [{ $toDouble: `$${field}.amount` }, multipleValue],
+              },
+            },
+            senderObligationCount: { $sum: 1 },
+          },
+        },
+        {
+          $sort: { senderCoinValue: -1 },
+        },
+        {
+          $limit: limit,
+        },
+        {
+          $project: {
+            sender: '$_id',
+            senderCoinType: 1,
+            senderCoinAmount: 1,
+            senderCoinValue: 1,
+            senderObligationCount: 1,
+            _id: 0,
+          },
+        },
+      ])
+      .exec();
+  }
+
+  async getTopBorrowValueSendersByCoinType(
+    coinType: string,
+    coinPrice: number,
+    multiple: number,
+    limit = 1000,
+  ): Promise<any> {
+    return this.getTopValueSendersByCoinType(
+      'debts',
+      coinType,
+      coinPrice,
+      multiple,
+      limit,
+    );
+  }
+
+  async getTopCollateralValueSendersByCoinType(
+    coinType: string,
+    coinPrice: number,
+    multiple: number,
+    limit = 1000,
+  ): Promise<any> {
+    return this.getTopValueSendersByCoinType(
+      'collaterals',
+      coinType,
+      coinPrice,
+      multiple,
+      limit,
+    );
+  }
+
+  async getTotalCollateralValueByCoinType(
+    coinType: string,
+    coinPrice: number,
+    multiple: number,
+  ): Promise<any> {
+    return this.getTotalValueByCoinType(
+      'collaterals',
+      coinType,
+      coinPrice,
+      multiple,
+    );
+  }
+
+  async getTotalBorrowValueByCoinType(
+    coinType: string,
+    coinPrice: number,
+    multiple: number,
+  ): Promise<any> {
+    return this.getTotalValueByCoinType('debts', coinType, coinPrice, multiple);
+  }
+
+  async getTotalValueByCoinType(
+    field: string,
+    coinType: string,
+    coinPrice: number,
+    multiple: number,
+  ): Promise<any> {
+    const multipleValue = coinPrice * multiple;
+    return await this.obligationModel
+      .aggregate([
+        {
+          $unwind: `$${field}`,
+        },
+        {
+          $match: {
+            [`${field}.asset`]: coinType,
+          },
+        },
+        {
+          $group: {
+            _id: `$${field}.asset`,
+            totalAsset: { $first: `$${field}.asset` },
+            totalAmount: { $sum: { $toDouble: `$${field}.amount` } },
+            totalValue: {
+              $sum: {
+                $multiply: [{ $toDouble: `$${field}.amount` }, multipleValue],
+              },
+            },
+            totalCount: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            totalAsset: '$_id',
+            totalAmount: 1,
+            totalValue: 1,
+            totalCount: 1,
+            _id: 0,
+          },
+        },
+      ])
+      .exec();
+  }
 }

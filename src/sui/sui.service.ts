@@ -27,7 +27,10 @@ export class SuiService {
   private PROTOCOL_ID =
     process.env.PROTOCOL_ID ||
     '0xa9cdb9d8e80465c75dcdad061cf1d462a9cf662da071412ca178d579d8df2855';
-  private COINS = ['BTC', 'ETH', 'USDT', 'USDC', 'SUI'];
+  private COINS = [
+    '0000000000000000000000000000000000000000000000000000000000000002::sui::SUI',
+    '5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
+  ];
 
   private _addresses = undefined;
   private _protocolId = undefined;

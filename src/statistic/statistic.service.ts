@@ -36,10 +36,12 @@ export class StatisticService {
     'https://api.zealy.io/communities/scallopio/leaderboard?limit=100&page=0';
   private LEADERBOARD_API_KEY =
     process.env.LEADERBOARD_API_KEY || 'e0f0d9MU4aYqPvu0JRTSFP0nYhs';
-  private LEADERBOARD_INTERVAL_SECONDS =
-    Number(process.env.LEADERBOARD_INTERVAL_SECONDS) || 60; // default 60 seconds
-
   private LEADERBOARD_LIMIT = 100;
+
+  private STATISTIC_INTERVAL_SECONDS =
+    Number(process.env.STATISTIC_INTERVAL_SECONDS) || 60; // default 60 seconds
+
+  private _coinPriceMap = new Map<string, number>();
 
   static resetLogTime() {
     StatisticService._logTime = new Date().getTime();
@@ -56,6 +58,10 @@ export class StatisticService {
   ): Promise<StatisticDocument> {
     const createdStatistic = new this.statisticModel(statistic);
     return createdStatistic.save({ session });
+  }
+
+  async findLatest(): Promise<Statistic> {
+    return this.statisticModel.findOne().sort({ createdAt: -1 }).exec();
   }
 
   async getCoinPriceFromBinance(symbol = 'USDC'): Promise<number> {
@@ -75,55 +81,183 @@ export class StatisticService {
   }
 
   async getCoinPriceMap(): Promise<Map<string, number>> {
-    //TODO: fetch coin price from oracle
-    const coinPriceMap = new Map<string, number>();
+    // const coinPriceMap = new Map<string, number>();
+    if (this._coinPriceMap.size === 0) {
+      try {
+        const coins = this._suiService.getCoinTypes();
+        for (const coin of coins) {
+          const coinSymbol =
+            coin.split('::')[2] === 'COIN' ? 'USDC' : coin.split('::')[2];
 
-    const coins = this._suiService.getCoinTypes();
-    for (const coin of coins) {
-      if (coin === 'USDT') {
-        coinPriceMap.set(coin, 1.0);
-      } else {
-        const coinPrice = await this.getCoinPriceFromBinance(coin);
-        coinPriceMap.set(coin, coinPrice);
+          const coinPrice = await this.getCoinPriceFromBinance(coinSymbol);
+          this._coinPriceMap.set(coin, coinPrice);
+        }
+      } catch (error) {
+        console.error('Error caught while getCoinPriceMap() ', error);
       }
     }
 
-    return coinPriceMap;
+    return this._coinPriceMap;
   }
 
-  async updateLatestLeaderboard(): Promise<any> {
-    let latestLeaderboard;
+  async updateMarketStatistic(
+    limit = this.LEADERBOARD_LIMIT,
+  ): Promise<Statistic> {
+    let marketStatistic = undefined;
     try {
       const currentTime = new Date().getTime();
       const passTime = (currentTime - StatisticService._logTime) / 1000;
-
-      if (passTime > this.LEADERBOARD_INTERVAL_SECONDS) {
-        const LEADERBOARD_API_URL = this.API_URL + 'leaderboards';
+      if (passTime > this.STATISTIC_INTERVAL_SECONDS) {
         const startTime = new Date().getTime();
-        latestLeaderboard = {
-          zealy: await this.fetchZealyLeaderboard(),
-          tvl: await this.fetchTvlLeaderboard(),
-          borrow: await this.fetchBorrowLeaderboard(),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+        let endTime = new Date().getTime();
+        let execTime = (endTime - startTime) / 1000;
 
-        await axios.post(LEADERBOARD_API_URL, latestLeaderboard, {
-          headers: {
-            'api-key': this.API_KEY,
-          },
-        });
+        marketStatistic = new Statistic();
+        const coinPriceMap = await this.getCoinPriceMap();
+        marketStatistic.prices = coinPriceMap;
 
-        const endTime = new Date().getTime();
-        const execTime = (endTime - startTime) / 1000;
-        console.log(
-          `[Leaderboard]: saveLatestLeaderboard(), <${execTime}> sec.`,
+        // get total borrow amount and value of each coin type
+        const totalDebts = [];
+        let totalBorrowValue = 0;
+        const borrowCoins =
+          await this._obligationService.findDistinctBorrowCoins();
+        for (const coin of borrowCoins) {
+          const coinPrice = coinPriceMap.get(coin.coinType);
+          const multiple = this.getDecimalMultiplier(coin.coinType);
+          const coinTotalBorrowValue =
+            await this._obligationService.getTotalBorrowValueByCoinType(
+              coin.coinType,
+              coinPrice,
+              multiple,
+            );
+          const totalCoinDebt = {
+            coin: coin.coinType,
+            balance: coinTotalBorrowValue[0].totalAmount,
+            value: coinTotalBorrowValue[0].totalValue,
+          };
+          totalBorrowValue += coinTotalBorrowValue[0].totalValue;
+          totalDebts.push(totalCoinDebt);
+        }
+        totalBorrowValue = Math.round(totalBorrowValue);
+        marketStatistic.totalBorrowValue = totalBorrowValue;
+        marketStatistic.debts = totalDebts;
+
+        // get total collateral amount and value of each coin type
+        const totalCollaterals = [];
+        let totalCollateralValue = 0;
+        const collateralCoins =
+          await this._obligationService.findDistinctCollateralsCoins();
+        for (const coin of collateralCoins) {
+          const coinPrice = coinPriceMap.get(coin.coinType);
+          const multiple = this.getDecimalMultiplier(coin.coinType);
+          const coinTotalCollateralValue =
+            await this._obligationService.getTotalCollateralValueByCoinType(
+              coin.coinType,
+              coinPrice,
+              multiple,
+            );
+          const totalCoinCollateral = {
+            coin: coin.coinType,
+            balance: coinTotalCollateralValue[0].totalAmount,
+            value: coinTotalCollateralValue[0].totalValue,
+          };
+          totalCollateralValue += coinTotalCollateralValue[0].totalValue;
+          totalCollaterals.push(totalCoinCollateral);
+        }
+        totalCollateralValue = Math.round(totalCollateralValue);
+        marketStatistic.totalCollateralValue = totalCollateralValue;
+        marketStatistic.collaterals = totalCollaterals;
+
+        // get total supply amount and value of each coin type
+        const totalSupplies = [];
+        let totalSupplyValue = 0;
+        const supplyCoins = await this._supplyService.findDistinctCoins();
+        for (const coin of supplyCoins) {
+          const coinPrice = coinPriceMap.get(coin.coinType);
+          const multiple = this.getDecimalMultiplier(coin.coinType);
+          const coinTotalSupplyValue =
+            await this._supplyService.getTotalSupplyValueByCoinType(
+              coin.coinType,
+              coinPrice,
+              multiple,
+            );
+          const totalCoinSupply = {
+            coin: coin.coinType,
+            balance: coinTotalSupplyValue[0].totalAmount,
+            value: coinTotalSupplyValue[0].totalValue,
+          };
+          totalSupplyValue += coinTotalSupplyValue[0].totalValue;
+          totalSupplies.push(totalCoinSupply);
+        }
+        totalSupplyValue = Math.round(totalSupplyValue);
+        marketStatistic.totalSupplyValue = totalSupplyValue;
+        marketStatistic.supplies = totalSupplies;
+
+        const totalTVL = Math.round(
+          totalSupplyValue + totalCollateralValue - totalBorrowValue,
         );
+        marketStatistic.totalTVL = totalTVL;
 
+        // get latest leaderboard
+        const leaderboards = new Map<string, any[]>();
+        const zealyLeaderboard = await this.fetchZealyLeaderboard();
+        leaderboards.set('zealy', zealyLeaderboard);
+        const borrowLeadboard = await this.fetchBorrowLeaderboard(limit);
+        leaderboards.set('borrow', borrowLeadboard);
+        const tvlLeadboard = await this.fetchTvlLeaderboard(limit);
+        leaderboards.set('tvl', tvlLeadboard);
+
+        marketStatistic.leaderboards = leaderboards;
+        await this.create(marketStatistic);
+        await this.updateLatestLeaderboardToAPI(marketStatistic);
+
+        // console.log('[MarketStatistic]:', marketStatistic);
+        endTime = new Date().getTime();
+        execTime = (endTime - startTime) / 1000;
+
+        const showSupplyValue = totalCollateralValue + totalSupplyValue;
+
+        console.log(
+          `[MarketStatistic]: TVL<${totalTVL}>, Supply<${showSupplyValue}>, Borrow<${totalBorrowValue}> , <${execTime}> sec.`,
+        );
         StatisticService.resetLogTime();
-      }
+      } // end of if passTime
+    } catch (error) {
+      console.error('Error caught while updateMarketStatistic() ', error);
+    }
+    return marketStatistic;
+  }
+
+  async updateLatestLeaderboardToAPI(latestStatistic: Statistic): Promise<any> {
+    let latestLeaderboard;
+    try {
+      const LEADERBOARD_API_URL = this.API_URL + 'leaderboards';
+      const startTime = new Date().getTime();
+      const zealyLeaderboard = latestStatistic.leaderboards.get('zealy');
+      const tvlLeadboard = latestStatistic.leaderboards.get('tvl');
+      const borrowLeadboard = latestStatistic.leaderboards.get('borrow');
+
+      latestLeaderboard = {
+        zealy: zealyLeaderboard,
+        tvl: tvlLeadboard,
+        borrow: borrowLeadboard,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      await axios.post(LEADERBOARD_API_URL, latestLeaderboard, {
+        headers: {
+          'api-key': this.API_KEY,
+        },
+      });
+
+      const endTime = new Date().getTime();
+      const execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[Leaderboard]: updateLatestLeaderboardToAPI(), <${execTime}> sec.`,
+      );
     } catch (e) {
-      console.error('Error caught while saveLatestLeaderboard() ', e);
+      console.error(`Error caught while updateLatestLeaderboardToAPI() ${e}`);
     }
     return latestLeaderboard;
   }
@@ -159,32 +293,90 @@ export class StatisticService {
     return zealyLeaderboard;
   }
 
-  private async calculateMarketValue(
-    coinName: string,
-    coinAmount: string,
-    coinPriceMap: Map<string, number>,
-  ): Promise<number> {
-    const coinSymbol =
-      coinName.split('::')[2] === 'COIN' ? 'USDC' : coinName.split('::')[2];
+  private getDecimalMultiplier(coinSymbol: string): number {
     let decimalMultiplier = 0;
     switch (coinSymbol) {
-      case 'USDC': {
+      case '5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN': {
         decimalMultiplier = 0.000001;
         break;
       }
-      case 'USDT': {
-        decimalMultiplier = 0.000001;
-        break;
-      }
+      // TODO: support other coins
+      // case 'USDT': {
+      //   decimalMultiplier = 0.000001;
+      //   break;
+      // }
       default: {
         decimalMultiplier = 0.000000001;
         break;
       }
     }
+    return decimalMultiplier;
+  }
 
-    return (
-      coinPriceMap.get(coinSymbol) * Number(coinAmount) * decimalMultiplier
-    );
+  async fetchBorrowLeaderboard(limit = this.LEADERBOARD_LIMIT): Promise<any[]> {
+    const borrowLeadboard = [];
+
+    try {
+      const startTime = new Date().getTime();
+      const coinPriceMap = await this.getCoinPriceMap();
+
+      // calculate borrow value of senders
+      const senderBorrowMap = new Map<string, number>();
+      const borrowCoins =
+        await this._obligationService.findDistinctBorrowCoins();
+      for (const coin of borrowCoins) {
+        const coinPrice = coinPriceMap.get(coin.coinType);
+        const multiple = this.getDecimalMultiplier(coin.coinType);
+        const topBorrowValueSenders =
+          await this._obligationService.getTopBorrowValueSendersByCoinType(
+            coin.coinType,
+            coinPrice,
+            multiple,
+          );
+        for (const sender of topBorrowValueSenders) {
+          let senderBorrowValue = sender.senderCoinValue;
+          if (senderBorrowMap.has(sender.sender)) {
+            senderBorrowValue += senderBorrowMap.get(sender.sender);
+          }
+          senderBorrowMap.set(sender.sender, senderBorrowValue);
+        }
+      }
+
+      // sort by value
+      const topBorrowerMap = new Map(
+        [...senderBorrowMap.entries()].sort((a, b) => b[1] - a[1]),
+      );
+
+      let rank = 0;
+      for (const [sender, senderBorrowValue] of topBorrowerMap) {
+        rank += 1;
+        const suiNS = sender;
+        const boardItem = {
+          rank: rank,
+          address: sender,
+          name: suiNS,
+          amount: senderBorrowValue,
+        };
+
+        if (rank <= limit) {
+          // TODO: optimize this SuiName bottleneck
+          // boardItem.name = await this._suiService.getSuiName(sender);
+          borrowLeadboard.push(boardItem);
+        } else {
+          break;
+        }
+      }
+
+      const endTime = new Date().getTime();
+      const execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[Leaderboard-Borrows]: fetchBorrowLeaderboard() <${execTime}> sec.`,
+      );
+    } catch (error) {
+      console.error('Error caught while fetchBorrowLeaderboard() ', error);
+    }
+
+    return borrowLeadboard;
   }
 
   async fetchTvlLeaderboard(limit = this.LEADERBOARD_LIMIT): Promise<any[]> {
@@ -194,63 +386,69 @@ export class StatisticService {
       const startTime = new Date().getTime();
       const coinPriceMap = await this.getCoinPriceMap();
 
-      const obligationList = await this._obligationService.findAll();
+      // calculate collateral value of senders
       const senderCollateralMap = new Map<string, number>();
+      const collateralCoins =
+        await this._obligationService.findDistinctCollateralsCoins();
+      for (const coin of collateralCoins) {
+        const coinPrice = coinPriceMap.get(coin.coinType);
+        const multiple = this.getDecimalMultiplier(coin.coinType);
+        const topCollateralValueSenders =
+          await this._obligationService.getTopCollateralValueSendersByCoinType(
+            coin.coinType,
+            coinPrice,
+            multiple,
+          );
+        for (const sender of topCollateralValueSenders) {
+          let senderCollateralValue = sender.senderCoinValue;
+          if (senderCollateralMap.has(sender.sender)) {
+            senderCollateralValue += senderCollateralMap.get(sender.sender);
+          }
+          senderCollateralMap.set(sender.sender, senderCollateralValue);
+        }
+      }
+
+      // calculate borrow value of senders
       const senderBorrowMap = new Map<string, number>();
-      for (const obligation of obligationList) {
-        // calculate collateral value of senders
-        let obligationCollateralValue = 0;
-        for (const collateral of obligation.collaterals) {
-          const collateralValue = await this.calculateMarketValue(
-            collateral.asset,
-            collateral.amount,
-            coinPriceMap,
+      const borrowCoins =
+        await this._obligationService.findDistinctBorrowCoins();
+      for (const coin of borrowCoins) {
+        const coinPrice = coinPriceMap.get(coin.coinType);
+        const multiple = this.getDecimalMultiplier(coin.coinType);
+        const topBorrowValueSenders =
+          await this._obligationService.getTopBorrowValueSendersByCoinType(
+            coin.coinType,
+            coinPrice,
+            multiple,
           );
-          obligationCollateralValue += collateralValue;
+        for (const sender of topBorrowValueSenders) {
+          let senderBorrowValue = sender.senderCoinValue;
+          if (senderBorrowMap.has(sender.sender)) {
+            senderBorrowValue += senderBorrowMap.get(sender.sender);
+          }
+          senderBorrowMap.set(sender.sender, senderBorrowValue);
         }
-        let senderCollateralValue = obligationCollateralValue;
-        if (senderCollateralMap.has(obligation.sender)) {
-          senderCollateralValue += senderCollateralMap.get(obligation.sender);
-        }
-        senderCollateralMap.set(obligation.sender, senderCollateralValue);
-
-        // calculate borrow value of senders
-        let obligationBorrowValue = 0;
-        for (const debt of obligation.debts) {
-          const borrowValue = await this.calculateMarketValue(
-            debt.asset,
-            debt.amount,
-            coinPriceMap,
-          );
-          obligationBorrowValue += borrowValue;
-        }
-
-        let senderBorrowValue = obligationBorrowValue;
-        if (senderBorrowMap.has(obligation.sender)) {
-          senderBorrowValue += senderBorrowMap.get(obligation.sender);
-        }
-        senderBorrowMap.set(obligation.sender, senderBorrowValue);
       }
 
       // calculate supply value of senders
-      const supplyList = await this._supplyService.findSuppliesWithBalance();
       const senderSupplyMap = new Map<string, number>();
-      for (const supply of supplyList) {
-        let supplyValue = 0;
-        for (const asset of supply.assets) {
-          const assetValue = await this.calculateMarketValue(
-            asset.coin,
-            asset.balance,
-            coinPriceMap,
+      const supplyCoins = await this._supplyService.findDistinctCoins();
+      for (const coin of supplyCoins) {
+        const coinPrice = coinPriceMap.get(coin.coinType);
+        const multiple = this.getDecimalMultiplier(coin.coinType);
+        const topSupplyValueSenders =
+          await this._supplyService.getTopSupplyValueSendersByCoinType(
+            coin.coinType,
+            coinPrice,
+            multiple,
           );
-          supplyValue += assetValue;
+        for (const sender of topSupplyValueSenders) {
+          let senderSupplyValue = sender.senderCoinValue;
+          if (senderSupplyMap.has(sender.sender)) {
+            senderSupplyValue += senderSupplyMap.get(sender.sender);
+          }
+          senderSupplyMap.set(sender.sender, senderSupplyValue);
         }
-
-        let senderSupplyValue = supplyValue;
-        if (senderSupplyMap.has(supply.sender)) {
-          senderSupplyValue += senderSupplyMap.get(supply.sender);
-        }
-        senderSupplyMap.set(supply.sender, senderSupplyValue);
       }
 
       // calculate total tvl value of unique senders
@@ -280,10 +478,8 @@ export class StatisticService {
       );
 
       let rank = 0;
-      let totalTvlValue = 0;
       for (const [sender, senderTvlValue] of topTvlerMap) {
         rank += 1;
-        totalTvlValue += senderTvlValue;
         const boardItem = {
           rank: rank,
           address: sender,
@@ -303,226 +499,13 @@ export class StatisticService {
       const endTime = new Date().getTime();
       const execTime = (endTime - startTime) / 1000;
       console.log(
-        `[Leaderboard-TVL]: Total TVL <$${Math.round(
-          totalTvlValue,
-        )}> USD, <${execTime}> sec.`,
+        `[Leaderboard-TVL]: fetchTvlLeaderboard() <${execTime}> sec.`,
       );
     } catch (error) {
       console.error('Error caught while fetchTvlLeaderboard() ', error);
     }
 
     return tvlLeadboard;
-  }
-
-  async fetchBorrowLeaderboard(limit = this.LEADERBOARD_LIMIT): Promise<any[]> {
-    const borrowLeadboard = [];
-
-    try {
-      const startTime = new Date().getTime();
-      const coinPriceMap = await this.getCoinPriceMap();
-
-      const obligationList = await this._obligationService.findAll();
-      // calculate borrow value of sender
-      const senderBorrowMap = new Map<string, number>();
-      for (const obligation of obligationList) {
-        let obligationBorrowValue = 0;
-        for (const debt of obligation.debts) {
-          const borrowValue = await this.calculateMarketValue(
-            debt.asset,
-            debt.amount,
-            coinPriceMap,
-          );
-
-          obligationBorrowValue += borrowValue;
-        }
-        let senderBorrowValue = obligationBorrowValue;
-        // console.log(`${obligation.sender}, Total: $${totalBorrowValue} USD`);
-        if (senderBorrowMap.has(obligation.sender)) {
-          senderBorrowValue += senderBorrowMap.get(obligation.sender);
-        }
-        senderBorrowMap.set(obligation.sender, senderBorrowValue);
-      }
-
-      // sort by value
-      const topBorrowerMap = new Map(
-        [...senderBorrowMap.entries()].sort((a, b) => b[1] - a[1]),
-      );
-
-      let rank = 0;
-      let totalBorrowValue = 0;
-      for (const [sender, senderBorrowValue] of topBorrowerMap) {
-        rank += 1;
-        totalBorrowValue += senderBorrowValue;
-        const suiNS = sender;
-        const boardItem = {
-          rank: rank,
-          address: sender,
-          name: suiNS,
-          amount: senderBorrowValue,
-        };
-
-        if (rank <= limit) {
-          // TODO: optimize this SuiName bottleneck
-          // boardItem.name = await this._suiService.getSuiName(sender);
-          borrowLeadboard.push(boardItem);
-        } else {
-          break;
-        }
-      }
-
-      const endTime = new Date().getTime();
-      const execTime = (endTime - startTime) / 1000;
-      console.log(
-        `[Leaderboard-Borrows]: Total Borrow <$${Math.round(
-          totalBorrowValue,
-        )}> USD, <${execTime}> sec.`,
-      );
-    } catch (error) {
-      console.error('Error caught while fetchBorrowLeaderboard() ', error);
-    }
-
-    return borrowLeadboard;
-  }
-
-  async fetchCollateralLeaderboard(
-    limit = this.LEADERBOARD_LIMIT,
-  ): Promise<any[]> {
-    const collateralLeadboard = [];
-
-    try {
-      const startTime = new Date().getTime();
-      const coinPriceMap = await this.getCoinPriceMap();
-
-      const obligationList = await this._obligationService.findAll();
-      // calculate collateral value of sender
-      const senderCollateralMap = new Map<string, number>();
-      for (const obligation of obligationList) {
-        let obligationCollateralValue = 0;
-        for (const collateral of obligation.collaterals) {
-          const collateralValue = await this.calculateMarketValue(
-            collateral.asset,
-            collateral.amount,
-            coinPriceMap,
-          );
-
-          obligationCollateralValue += collateralValue;
-        }
-        let senderCollateralValue = obligationCollateralValue;
-        if (senderCollateralMap.has(obligation.sender)) {
-          senderCollateralValue += senderCollateralMap.get(obligation.sender);
-        }
-        senderCollateralMap.set(obligation.sender, senderCollateralValue);
-      }
-
-      // sort by value
-      const topCollateralerMap = new Map(
-        [...senderCollateralMap.entries()].sort((a, b) => b[1] - a[1]),
-      );
-
-      let rank = 0;
-      let totalCollateralValue = 0;
-      for (const [sender, senderCollateralValue] of topCollateralerMap) {
-        rank += 1;
-        totalCollateralValue += senderCollateralValue;
-        // const suiNS = await this._suiService.getSuiName(sender);
-        const suiNS = sender;
-        const boardItem = {
-          rank: rank,
-          address: sender,
-          name: suiNS,
-          amount: senderCollateralValue,
-        };
-
-        if (rank <= limit) {
-          // TODO: optimize this SuiName bottleneck
-          // boardItem.name = await this._suiService.getSuiName(sender);
-          collateralLeadboard.push(boardItem);
-        } else {
-          break;
-        }
-      }
-      const endTime = new Date().getTime();
-      const execTime = (endTime - startTime) / 1000;
-      console.log(
-        `[Leaderboard-Collaterals]: Total Collaterals <$${Math.round(
-          totalCollateralValue,
-        )}> USD, <${execTime}> sec.`,
-      );
-    } catch (error) {
-      console.error('Error caught while fetchCollateralLeaderboard() ', error);
-    }
-
-    return collateralLeadboard;
-  }
-
-  async fetchSupplyLeaderboard(limit = this.LEADERBOARD_LIMIT): Promise<any[]> {
-    const supplyLeadboard = [];
-
-    try {
-      const startTime = new Date().getTime();
-      // get coin price
-      const coinPriceMap = await this.getCoinPriceMap();
-
-      // calculate supply value of sender
-      const supplyList = await this._supplyService.findSuppliesWithBalance();
-      const senderSupplyMap = new Map<string, number>();
-      for (const supply of supplyList) {
-        let supplyValue = 0;
-        for (const asset of supply.assets) {
-          const assetValue = await this.calculateMarketValue(
-            asset.coin,
-            asset.balance,
-            coinPriceMap,
-          );
-
-          supplyValue += assetValue;
-        }
-        let senderSupplyValue = supplyValue;
-        // console.log(`${supply.sender}, Total: $${supplyValue} USD`);
-        if (senderSupplyMap.has(supply.sender)) {
-          senderSupplyValue += senderSupplyMap.get(supply.sender);
-        }
-        senderSupplyMap.set(supply.sender, senderSupplyValue);
-      }
-      // sort by value
-      const topSupplyerMap = new Map(
-        [...senderSupplyMap.entries()].sort((a, b) => b[1] - a[1]),
-      );
-
-      let rank = 0;
-      let totalSupplyValue = 0;
-      for (const [sender, senderSupplyValue] of topSupplyerMap) {
-        rank += 1;
-        totalSupplyValue += senderSupplyValue;
-        // const suiNS = await this._suiService.getSuiName(sender);
-        const suiNS = sender;
-        const boardItem = {
-          rank: rank,
-          address: sender,
-          name: suiNS,
-          amount: senderSupplyValue,
-        };
-
-        if (rank <= limit) {
-          // TODO: optimize this SuiName bottleneck
-          // boardItem.name = await this._suiService.getSuiName(sender);
-          supplyLeadboard.push(boardItem);
-        } else {
-          break;
-        }
-      }
-      const endTime = new Date().getTime();
-      const execTime = (endTime - startTime) / 1000;
-      console.log(
-        `[Leaderboard-Supply]: Total Supply <$${Math.round(
-          totalSupplyValue,
-        )}> USD, <${execTime}> sec.`,
-      );
-    } catch (error) {
-      console.error('Error caught while fetchSupplyLeaderboard() ', error);
-    }
-
-    return supplyLeadboard;
   }
 
   async updateSupplyBalance(
@@ -542,7 +525,6 @@ export class StatisticService {
         const balanceMap = new Map<string, number>();
         for (let i = 0; i < mintList.length; i++) {
           const mint = mintList[i];
-          // const coinName = mint.mintAsset.split('::')[2];
           const coinName = mint.depositAsset;
           const coinAmount = Number(mint.depositAmount);
           let balance = 0;
@@ -553,7 +535,6 @@ export class StatisticService {
         }
         for (let i = 0; i < redeemList.length; i++) {
           const redeem = redeemList[i];
-          // const coinName = redeem.withdrawAsset.split('::')[2];
           const coinName = redeem.withdrawAsset;
           const coinAmount = Number(redeem.withdrawAmount);
           let balance = 0;

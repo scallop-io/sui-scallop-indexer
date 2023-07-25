@@ -4,51 +4,15 @@ import { now, Document } from 'mongoose';
 export type StatisticDocument = Statistic & Document;
 
 @Schema({ _id: false })
-export class Collateral {
+export class Pool {
   @Prop()
   coin?: string;
 
   @Prop()
-  price?: number;
+  balance?: string;
 
   @Prop()
-  deposit?: number;
-
-  @Prop()
-  weight?: number;
-}
-
-@Schema({ _id: false })
-export class Asset {
-  @Prop()
-  coin?: string;
-
-  @Prop()
-  price?: number;
-
-  @Prop()
-  supply?: number;
-
-  @Prop()
-  borrow?: number;
-
-  @Prop()
-  liquity?: number;
-
-  @Prop()
-  borrowWeight?: number;
-
-  @Prop()
-  supplyRate?: number;
-
-  @Prop()
-  borrowRate?: number;
-
-  @Prop()
-  utilizationRate?: number;
-
-  @Prop()
-  weight?: number;
+  value?: string;
 }
 
 @Schema({
@@ -66,23 +30,32 @@ export class Statistic {
   @Prop({ default: now() })
   timestamp?: Date;
 
-  @Prop({ default: [] })
-  collaterals?: Collateral[];
+  @Prop({ default: new Map() })
+  prices: Map<string, number>;
 
   @Prop({ default: [] })
-  assets?: Asset[];
+  collaterals?: Pool[];
 
-  @Prop({ index: true, sparse: true })
-  dataType?: string;
+  @Prop({ default: [] })
+  debts?: Pool[];
+
+  @Prop({ default: [] })
+  supplies?: Pool[];
 
   @Prop()
-  totalSupply?: number;
+  totalSupplyValue?: number;
 
   @Prop()
-  totalBorrow?: number;
+  totalBorrowValue?: number;
+
+  @Prop()
+  totalCollateralValue?: number;
 
   @Prop()
   totalTVL?: number;
+
+  @Prop({ default: [] })
+  leaderboards?: Map<string, any[]>;
 
   @Prop({ default: now().toString() })
   createdAt?: string;

@@ -402,24 +402,29 @@ export class AppService {
       const uniqueSenders = [...new Set([...mintSenders, ...redeemSenders])];
       // console.log(`[UniqueSenders]: <${uniqueSenders.length}>`);
 
-      updatingSession.startTransaction();
-      const updateSupplies = await this._statisticService.updateSupplyBalance(
-        uniqueSenders,
-        updatingSession,
-      );
-      await updatingSession.commitTransaction();
-      endTime = new Date().getTime();
-      execTime = (endTime - startTime) / 1000;
-      console.log(
-        `[Supply]: Update <${updateSupplies.length}>, <${execTime}> secs`,
-      );
+      try {
+        updatingSession.startTransaction();
+        const updateSupplies = await this._statisticService.updateSupplyBalance(
+          uniqueSenders,
+          updatingSession,
+        );
+        await updatingSession.commitTransaction();
+        endTime = new Date().getTime();
+        execTime = (endTime - startTime) / 1000;
+        console.log(
+          `[Supply]: Update <${updateSupplies.length}>, <${execTime}> secs`,
+        );
+      } catch (err) {
+        await updatingSession.abortTransaction();
+        console.error('Error caught while updateSupplyBalance():', err);
+      } finally {
+        updatingSession.endSession();
+      }
     } catch (e) {
-      if (lendingSession) await lendingSession.abortTransaction();
-      if (updatingSession) await updatingSession.abortTransaction();
+      await lendingSession.abortTransaction();
       console.error('Error caught while update Lending events:', e);
     } finally {
       lendingSession.endSession();
-      updatingSession.endSession();
     }
   }
 
@@ -444,8 +449,8 @@ export class AppService {
       // Get & update lending events
       await this.updateLendingRelatedEvents();
 
-      // Get & update leaderboard (default 60 seconds)
-      // this._statisticService.updateLatestLeaderboard();
+      // Get & update statistic & leaderboard (default 60 seconds)
+      await this._statisticService.updateMarketStatistic();
 
       const end = new Date().getTime();
       const execTime = (end - start) / 1000;
