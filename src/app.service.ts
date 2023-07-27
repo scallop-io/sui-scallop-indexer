@@ -343,7 +343,7 @@ export class AppService {
     }
   }
 
-  async updateLendingRelatedEvents(): Promise<void> {
+  async updateLendingRelatedEvents(): Promise<any[]> {
     // Get & update lending events
     const lendingEventStateMap = new Map();
 
@@ -359,7 +359,7 @@ export class AppService {
 
     const lendingSession = await this.connection.startSession();
     lendingSession.startTransaction();
-    const updatingSession = await this.connection.startSession();
+
     try {
       // update mints
       let startTime = new Date().getTime();
@@ -400,31 +400,43 @@ export class AppService {
         ...new Set(redeems.map((redeem) => redeem.sender)),
       ];
       const uniqueSenders = [...new Set([...mintSenders, ...redeemSenders])];
+      return uniqueSenders;
       // console.log(`[UniqueSenders]: <${uniqueSenders.length}>`);
-
-      try {
-        updatingSession.startTransaction();
-        const updateSupplies = await this._statisticService.updateSupplyBalance(
-          uniqueSenders,
-          updatingSession,
-        );
-        await updatingSession.commitTransaction();
-        endTime = new Date().getTime();
-        execTime = (endTime - startTime) / 1000;
-        console.log(
-          `[Supply]: Update <${updateSupplies.length}>, <${execTime}> secs`,
-        );
-      } catch (err) {
-        await updatingSession.abortTransaction();
-        console.error('Error caught while updateSupplyBalance():', err);
-      } finally {
-        updatingSession.endSession();
-      }
     } catch (e) {
       await lendingSession.abortTransaction();
       console.error('Error caught while update Lending events:', e);
     } finally {
       lendingSession.endSession();
+    }
+  }
+
+  async updateSupplies(uniqueSenders: any[]): Promise<void> {
+    const updatingSession = await this.connection.startSession();
+    try {
+      const startTime = new Date().getTime();
+      updatingSession.startTransaction();
+      const updateSupplies = await this._statisticService.updateSupplyBalance(
+        uniqueSenders,
+        updatingSession,
+      );
+      await updatingSession.commitTransaction();
+
+      const endTime = new Date().getTime();
+      const execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[Supply]: Unique<${uniqueSenders.length}>, Update <${updateSupplies.length}>, <${execTime}> secs`,
+      );
+    } catch (err) {
+      console.error(`Error caught while updateSupplies() ${err}`);
+      try {
+        await updatingSession.abortTransaction();
+      } catch (e) {
+        console.error(
+          `Error caught while updateSupplies->abortTransaction() ${e}`,
+        );
+      }
+    } finally {
+      updatingSession.endSession();
     }
   }
 
@@ -447,7 +459,8 @@ export class AppService {
       await this.updateFlashloanRelatedEvents();
 
       // Get & update lending events
-      await this.updateLendingRelatedEvents();
+      const uniqueSenders = await this.updateLendingRelatedEvents();
+      await this.updateSupplies(uniqueSenders);
 
       // Get & update statistic & leaderboard (default 60 seconds)
       await this._statisticService.updateMarketStatistic();

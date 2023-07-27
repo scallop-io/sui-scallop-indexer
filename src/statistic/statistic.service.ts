@@ -513,7 +513,6 @@ export class StatisticService {
     session: mongoose.ClientSession | null = null,
   ): Promise<any[]> {
     const supplies = [];
-
     try {
       for (let i = 0; i < senderList.length; i++) {
         const senderId = senderList[i];
@@ -544,7 +543,7 @@ export class StatisticService {
           balanceMap.set(coinName, balance - coinAmount);
         }
 
-        // Save supply balance
+        // Check supply assets balance
         const assets = [];
         for (const [coinName, balance] of balanceMap) {
           const processedBalance = Math.max(0, balance);
@@ -556,19 +555,21 @@ export class StatisticService {
             assets.push(asset);
           }
         }
-        const supply = {
-          sender: senderId,
-          assets: assets,
-        };
-        const supplyObj =
-          await this._supplyService.findOneBySenderAndUpdateSupply(
-            senderId,
-            supply,
-            session,
-          );
-        // console.log(supplyObj);
-        supplies.push(supplyObj);
-      }
+        // Save only supply with assets
+        if (assets.length > 0) {
+          const supply = {
+            sender: senderId,
+            assets: assets,
+          };
+          const supplyObj =
+            await this._supplyService.findOneBySenderAndUpdateSupply(
+              senderId,
+              supply,
+              session,
+            );
+          supplies.push(supplyObj);
+        }
+      } // end of for loop
     } catch (error) {
       console.error('Error caught while updateSupplyBalance() ', error);
     }

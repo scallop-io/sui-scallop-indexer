@@ -250,7 +250,7 @@ export class SuiService {
         collaterals.push(collateral);
       }
     } catch (e) {
-      console.error('Error caught while getCollaterals(): ', e);
+      console.error(`Error caught while getCollaterals(): ${e}`);
     }
     return collaterals;
   }
@@ -289,7 +289,7 @@ export class SuiService {
         debts.push(debt);
       }
     } catch (e) {
-      console.error('Error caught while getDebts(): ', e);
+      console.error(`Error caught while getDebts(): ${e}`);
     }
     return debts;
   }
@@ -331,7 +331,7 @@ export class SuiService {
         }
       }
     } catch (e) {
-      console.error('Error caught while getBorrowDynamics(): ', e);
+      console.error(`Error caught while getBorrowDynamics(): ${e}`);
     }
     return borrowDynamics;
   }
@@ -343,10 +343,10 @@ export class SuiService {
     pageLimit = 10,
   ): Promise<any[]> {
     const eventObjects = [];
+    const eventName = eventType.split('::')[2];
     try {
       const startTime = new Date().getTime();
       // Find if there is cursor stored in DB
-      const eventName = eventType.split('::')[2];
       const eventState = await this._eventStateService.findByEventType(
         eventType,
       );
@@ -431,10 +431,9 @@ export class SuiService {
         };
         eventStateMap.set(eventType, lastEventState);
       }
-    } catch (e) {
+    } catch (err) {
       console.error(
-        `Error caught while getEventsFromQuery() for ${eventType}:`,
-        e,
+        `Error caught while getEventsFromQuery() for ${eventName}: ${err}`,
       );
     }
     return eventObjects;
