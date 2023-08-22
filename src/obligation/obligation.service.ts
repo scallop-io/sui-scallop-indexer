@@ -155,6 +155,31 @@ export class ObligationService {
     );
   }
 
+  // get created obligations
+  async getObligationsFromQueryEventByPages(
+    suiService: SuiService,
+    eventStateMap: Map<string, EventState>,
+  ): Promise<[any[], boolean]> {
+    const eventId = await suiService.getObligationCreatedEventId();
+    return await suiService.getEventsFromQueryByPages(
+      // process.env.EVENT_OBLIGATION_CREATED,
+      eventId,
+      eventStateMap,
+      async (item) => {
+        const version = await suiService.getObligationVersion(
+          item.parsedJson.obligation,
+        );
+        return {
+          obligation_id: item.parsedJson.obligation,
+          obligation_key: item.parsedJson.obligation_key,
+          sender: item.parsedJson.sender,
+          timestampMs: item.timestampMs,
+          version: version,
+        };
+      },
+    );
+  }
+
   async findAll(): Promise<Obligation[]> {
     return this.obligationModel.find().exec();
   }

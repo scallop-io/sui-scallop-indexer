@@ -39,9 +39,75 @@ export class StatisticService {
   private LEADERBOARD_LIMIT = 100;
 
   private STATISTIC_INTERVAL_SECONDS =
-    Number(process.env.STATISTIC_INTERVAL_SECONDS) || 60; // default 60 seconds
+    Number(process.env.STATISTIC_INTERVAL_SECONDS) || 600; // default 10 mins
 
   private _coinPriceMap = new Map<string, number>();
+
+  private COIN_DECIMALS = new Map<string, number>([
+    [
+      //SUI
+      '0000000000000000000000000000000000000000000000000000000000000002::sui::SUI',
+      9,
+    ],
+    [
+      //USDC
+      '5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
+      6,
+    ],
+    [
+      //USDT
+      'c060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN',
+      6,
+    ],
+    [
+      //ETH
+      'af8cd5edc19c4512f4259f0bee101a40d41ebed738ade5874359610ef8eeced5::coin::COIN',
+      8,
+    ],
+    [
+      //SOL
+      'b7844e289a8410e50fb3ca48d69eb9cf29e27d223ef90353fe1bd8e27ff8f3f8::coin::COIN',
+      8,
+    ],
+    [
+      //BTC
+      '027792d9fed7f9844eb4839566001bb6f6cb4804f66aa2da6fe1ee242d896881::coin::COIN',
+      8,
+    ],
+    [
+      //APT
+      '3a5143bb1196e3bcdfab6203d1683ae29edd26294fc8bfeafe4aaa9d2704df37::coin::COIN',
+      8,
+    ],
+    [
+      //CETUS
+      '06864a6f921804860930db6ddbe2e16acdf8504495ea7481637a1c8b9a8fe54b::cetus::CETUS',
+      9,
+    ],
+  ]);
+
+  // private COIN_DECIMALS = new Map<string, number>([
+  //   ['SUI', 9],
+  //   ['USDC', 6],
+  //   ['USDT', 6],
+  //   ['ETH', 8],
+  //   ['SOL', 8],
+  //   ['BTC', 8],
+  // ]);
+  private WORMHOLE_COINS = new Map<string, string>([
+    [
+      '5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf',
+      'USDC',
+    ],
+    [
+      'c060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c',
+      'USDT',
+    ],
+    ['af8cd5edc19c4512f4259f0bee101a40d41ebed738ade5874359610ef8eeced5', 'ETH'],
+    ['b7844e289a8410e50fb3ca48d69eb9cf29e27d223ef90353fe1bd8e27ff8f3f8', 'SOL'],
+    ['027792d9fed7f9844eb4839566001bb6f6cb4804f66aa2da6fe1ee242d896881', 'BTC'],
+    ['3a5143bb1196e3bcdfab6203d1683ae29edd26294fc8bfeafe4aaa9d2704df37', 'APT'],
+  ]);
 
   static resetLogTime() {
     StatisticService._logTime = new Date().getTime();
@@ -64,14 +130,34 @@ export class StatisticService {
     return this.statisticModel.findOne().sort({ createdAt: -1 }).exec();
   }
 
-  async getCoinPriceFromBinance(symbol = 'USDC'): Promise<number> {
+  private getDecimalMultiplier(coinType: string): number {
+    const decimal = this.COIN_DECIMALS.get(coinType) || 6;
+    const decimalMultiplier = 1 / Math.pow(10, decimal);
+    return decimalMultiplier;
+  }
+
+  getCoinSymbol(coinType: string): string {
+    let coinSymbol = coinType.split('::')[2].toUpperCase();
+    // Deal with WormholeCoin Mapping
+    if (coinSymbol === 'COIN') {
+      const coinContract = coinType.split('::')[0];
+      coinSymbol = this.WORMHOLE_COINS.get(coinContract);
+    }
+    return coinSymbol || '';
+  }
+
+  async getCoinPriceFromBinance(symbol = 'USDT'): Promise<number> {
     let coinPrice = 0;
     try {
-      const response = await axios.get(
-        `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}USDT`,
-      );
-      if (response.data.price) {
-        coinPrice = Number(response.data.price);
+      if (symbol === 'USDT') {
+        return 1;
+      } else {
+        const response = await axios.get(
+          `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}USDT`,
+        );
+        if (response.data.price) {
+          coinPrice = Number(response.data.price);
+        }
       }
     } catch (error) {
       console.error('Error caught while getCoinPriceFromBinance() ', error);
@@ -84,14 +170,19 @@ export class StatisticService {
     // const coinPriceMap = new Map<string, number>();
     if (this._coinPriceMap.size === 0) {
       try {
-        const coins = this._suiService.getCoinTypes();
-        for (const coin of coins) {
-          const coinSymbol =
-            coin.split('::')[2] === 'COIN' ? 'USDC' : coin.split('::')[2];
-
+        for (const coinType in this.COIN_DECIMALS.keys()) {
+          const coinSymbol = this.getCoinSymbol(coinType);
           const coinPrice = await this.getCoinPriceFromBinance(coinSymbol);
-          this._coinPriceMap.set(coin, coinPrice);
+          this._coinPriceMap.set(coinType, coinPrice);
         }
+        // const coins = this._suiService.getCoinTypes();
+        // for (const coin of coins) {
+        //   const coinSymbol =
+        //     coin.split('::')[2] === 'COIN' ? 'USDC' : coin.split('::')[2];
+
+        //   const coinPrice = await this.getCoinPriceFromBinance(coinSymbol);
+        //   this._coinPriceMap.set(coin, coinPrice);
+        // }
       } catch (error) {
         console.error('Error caught while getCoinPriceMap() ', error);
       }
@@ -293,26 +384,6 @@ export class StatisticService {
     return zealyLeaderboard;
   }
 
-  private getDecimalMultiplier(coinSymbol: string): number {
-    let decimalMultiplier = 0;
-    switch (coinSymbol) {
-      case '5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN': {
-        decimalMultiplier = 0.000001;
-        break;
-      }
-      // TODO: support other coins
-      // case 'USDT': {
-      //   decimalMultiplier = 0.000001;
-      //   break;
-      // }
-      default: {
-        decimalMultiplier = 0.000000001;
-        break;
-      }
-    }
-    return decimalMultiplier;
-  }
-
   async fetchBorrowLeaderboard(limit = this.LEADERBOARD_LIMIT): Promise<any[]> {
     const borrowLeadboard = [];
 
@@ -359,7 +430,6 @@ export class StatisticService {
         };
 
         if (rank <= limit) {
-          // TODO: optimize this SuiName bottleneck
           // boardItem.name = await this._suiService.getSuiName(sender);
           borrowLeadboard.push(boardItem);
         } else {
@@ -488,7 +558,6 @@ export class StatisticService {
         };
 
         if (rank <= limit) {
-          // TODO: optimize this SuiName bottleneck
           // boardItem.name = await this._suiService.getSuiName(sender);
           tvlLeadboard.push(boardItem);
         } else {
@@ -571,7 +640,7 @@ export class StatisticService {
         }
       } // end of for loop
     } catch (error) {
-      console.error('Error caught while updateSupplyBalance() ', error);
+      console.error(`Error caught while updateSupplyBalance() ${error}`);
     }
 
     return supplies;

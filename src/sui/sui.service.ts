@@ -15,6 +15,7 @@ export class SuiService {
   public SUI_QUERY_LIMIT = Number(process.env.QUERY_LIMIT) || 50;
   public RPC_QPS_LIMIT = Number(process.env.RPC_QPS) || 100;
   public RPC_DELAY_SECONDS = Number(process.env.RPC_DELAY_SECONDS) || 1;
+  public SUI_PAGE_LIMIT = Number(process.env.PAGE_LIMIT) || 4;
 
   private API_URL = process.env.API_URL || 'https://sui.api.scallop.io/';
   private API_KEY = process.env.API_KEY || 'scalloptestapikey';
@@ -27,10 +28,10 @@ export class SuiService {
   private PROTOCOL_ID =
     process.env.PROTOCOL_ID ||
     '0xa9cdb9d8e80465c75dcdad061cf1d462a9cf662da071412ca178d579d8df2855';
-  private COINS = [
-    '0000000000000000000000000000000000000000000000000000000000000002::sui::SUI',
-    '5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
-  ];
+  // private COINS = [
+  //   '0000000000000000000000000000000000000000000000000000000000000002::sui::SUI',
+  //   '5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
+  // ];
 
   private _addresses = undefined;
   private _protocolId = undefined;
@@ -88,9 +89,9 @@ export class SuiService {
     return this._marketId;
   }
 
-  public getCoinTypes() {
-    return this.COINS;
-  }
+  // public getCoinTypes() {
+  //   return this.COINS;
+  // }
 
   private async getProtocolId() {
     if (!this._protocolId) {
@@ -194,7 +195,6 @@ export class SuiService {
 
   async checkRPCLimit() {
     SuiService._queryCount++;
-
     if (SuiService._queryCount >= this.RPC_QPS_LIMIT) {
       // Delay 1 sec to avoid query limit
       console.debug(`Delay ${this.RPC_DELAY_SECONDS} sec to avoid query limit`);
@@ -336,12 +336,13 @@ export class SuiService {
     return borrowDynamics;
   }
 
-  async getEventsFromQuery(
+  async getEventsFromQueryByPages(
     eventType: string,
     eventStateMap: Map<string, EventState>,
     createCallback: (item: any) => Promise<any>,
-    pageLimit = 10,
-  ): Promise<any[]> {
+    pageLimit = this.SUI_PAGE_LIMIT,
+  ): Promise<[any[], boolean]> {
+    let hasNextPage = true;
     const eventObjects = [];
     const eventName = eventType.split('::')[2];
     try {
@@ -358,7 +359,6 @@ export class SuiService {
         cursorEventSeq = eventState.nextCursorEventSeq;
       }
 
-      let hasNextPage = true;
       let latestEvent: PaginatedEvents;
       const eventData = [];
       let pageCount = 0;
@@ -404,6 +404,7 @@ export class SuiService {
           cursorTxDigest = latestEvent.nextCursor.txDigest;
           cursorEventSeq = latestEvent.nextCursor.eventSeq;
         }
+
         pageCount++;
         if (pageCount >= pageLimit) {
           break;
@@ -436,8 +437,128 @@ export class SuiService {
         `Error caught while getEventsFromQuery() for ${eventName}: ${err}`,
       );
     }
+    return [eventObjects, hasNextPage];
+  }
+
+  async getEventsFromQuery(
+    eventType: string,
+    eventStateMap: Map<string, EventState>,
+    createCallback: (item: any) => Promise<any>,
+    pageLimit = this.SUI_PAGE_LIMIT,
+  ): Promise<any[]> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [eventObjects, hasNextPage] = await this.getEventsFromQueryByPages(
+      eventType,
+      eventStateMap,
+      createCallback,
+      pageLimit,
+    );
     return eventObjects;
   }
+
+  // async getEventsFromQuery(
+  //   eventType: string,
+  //   eventStateMap: Map<string, EventState>,
+  //   createCallback: (item: any) => Promise<any>,
+  //   pageLimit = this.SUI_PAGE_LIMIT,
+  // ): Promise<any[]> {
+  //   const eventObjects = [];
+  //   const eventName = eventType.split('::')[2];
+  //   try {
+  //     const startTime = new Date().getTime();
+  //     // Find if there is cursor stored in DB
+  //     const eventState = await this._eventStateService.findByEventType(
+  //       eventType,
+  //     );
+
+  //     let cursorTxDigest = undefined;
+  //     let cursorEventSeq = undefined;
+  //     if (eventState !== null) {
+  //       cursorTxDigest = eventState.nextCursorTxDigest;
+  //       cursorEventSeq = eventState.nextCursorEventSeq;
+  //     }
+
+  //     let hasNextPage = true;
+  //     let latestEvent: PaginatedEvents;
+  //     const eventData = [];
+  //     let pageCount = 0;
+  //     while (hasNextPage) {
+  //       if (cursorTxDigest === undefined || cursorEventSeq === undefined) {
+  //         latestEvent =
+  //           await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
+  //             query: {
+  //               MoveEventType: eventType,
+  //             },
+  //             limit: this.SUI_QUERY_LIMIT,
+  //             order: 'ascending',
+  //           });
+  //         console.debug(`[${eventName}]: query from <start>.`);
+  //       } else {
+  //         latestEvent =
+  //           await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
+  //             query: {
+  //               MoveEventType: eventType,
+  //             },
+  //             cursor: {
+  //               txDigest: cursorTxDigest,
+  //               eventSeq: cursorEventSeq,
+  //             },
+  //             limit: this.SUI_QUERY_LIMIT,
+  //             order: 'ascending',
+  //           });
+  //         console.debug(
+  //           `[${eventName}]: query from cursor <${cursorTxDigest}>, seq<${cursorEventSeq}>`,
+  //         );
+  //       }
+  //       await this.checkRPCLimit();
+
+  //       for (const element of latestEvent.data) {
+  //         eventData.push(element);
+
+  //         cursorTxDigest = element.id.txDigest;
+  //         cursorEventSeq = element.id.eventSeq;
+  //       }
+
+  //       hasNextPage = latestEvent.hasNextPage;
+  //       if (hasNextPage === true) {
+  //         cursorTxDigest = latestEvent.nextCursor.txDigest;
+  //         cursorEventSeq = latestEvent.nextCursor.eventSeq;
+  //       }
+
+  //       pageCount++;
+  //       if (pageCount >= pageLimit) {
+  //         break;
+  //       }
+  //     } //end of while
+
+  //     // Prase data
+  //     for (const item of eventData) {
+  //       const newEvent = await createCallback(item);
+  //       eventObjects.push(newEvent);
+  //       console.log(`[${eventName}]: create <${newEvent.obligation_id}>`);
+  //     }
+  //     const endTime = new Date().getTime();
+  //     const execTime = (endTime - startTime) / 1000;
+  //     console.log(
+  //       `[${eventName}]: create <${eventObjects.length}> events, <${execTime}> sec.`,
+  //     );
+
+  //     // Save Next Cursor data
+  //     if (eventObjects.length > 0) {
+  //       const lastEventState: EventState = {
+  //         eventType: eventType,
+  //         nextCursorTxDigest: latestEvent.nextCursor.txDigest,
+  //         nextCursorEventSeq: latestEvent.nextCursor.eventSeq,
+  //       };
+  //       eventStateMap.set(eventType, lastEventState);
+  //     }
+  //   } catch (err) {
+  //     console.error(
+  //       `Error caught while getEventsFromQuery() for ${eventName}: ${err}`,
+  //     );
+  //   }
+  //   return eventObjects;
+  // }
 
   async getObligationVersion(obligation_id: string): Promise<string> {
     const obj = await SuiService.getSuiKit()
