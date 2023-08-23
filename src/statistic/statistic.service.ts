@@ -226,7 +226,7 @@ export class StatisticService {
             balance: coinTotalBorrowValue[0].totalAmount,
             value: coinTotalBorrowValue[0].totalValue,
           };
-          totalBorrowValue += coinTotalBorrowValue[0].totalValue;
+          totalBorrowValue += coinTotalBorrowValue[0].totalValue || 0;
           totalDebts.push(totalCoinDebt);
         }
         totalBorrowValue = Math.round(totalBorrowValue);
@@ -252,7 +252,7 @@ export class StatisticService {
             balance: coinTotalCollateralValue[0].totalAmount,
             value: coinTotalCollateralValue[0].totalValue,
           };
-          totalCollateralValue += coinTotalCollateralValue[0].totalValue;
+          totalCollateralValue += coinTotalCollateralValue[0].totalValue || 0;
           totalCollaterals.push(totalCoinCollateral);
         }
         totalCollateralValue = Math.round(totalCollateralValue);
@@ -277,7 +277,7 @@ export class StatisticService {
             balance: coinTotalSupplyValue[0].totalAmount,
             value: coinTotalSupplyValue[0].totalValue,
           };
-          totalSupplyValue += coinTotalSupplyValue[0].totalValue;
+          totalSupplyValue += coinTotalSupplyValue[0].totalValue || 0;
           totalSupplies.push(totalCoinSupply);
         }
         totalSupplyValue = Math.round(totalSupplyValue);
