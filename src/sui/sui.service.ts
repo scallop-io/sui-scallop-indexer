@@ -15,7 +15,7 @@ export class SuiService {
   public SUI_QUERY_LIMIT = Number(process.env.QUERY_LIMIT) || 50;
   public RPC_QPS_LIMIT = Number(process.env.RPC_QPS) || 100;
   public RPC_DELAY_SECONDS = Number(process.env.RPC_DELAY_SECONDS) || 1;
-  public SUI_PAGE_LIMIT = Number(process.env.PAGE_LIMIT) || 4;
+  public SUI_PAGE_LIMIT = Number(process.env.PAGE_LIMIT) || 1;
 
   private API_URL = process.env.API_URL || 'https://sui.api.scallop.io/';
   private API_KEY = process.env.API_KEY || 'scalloptestapikey';
@@ -417,20 +417,31 @@ export class SuiService {
         eventObjects.push(newEvent);
         // console.log(`[${eventName}]: create <${newEvent.obligation_id}>`);
       }
+
       const endTime = new Date().getTime();
       const execTime = (endTime - startTime) / 1000;
-      console.log(
-        `[${eventName}]: create <${eventObjects.length}> events, <${execTime}> sec.`,
-      );
 
-      // Save Next Cursor data
-      if (eventObjects.length > 0) {
-        const lastEventState: EventState = {
-          eventType: eventType,
-          nextCursorTxDigest: latestEvent.nextCursor.txDigest,
-          nextCursorEventSeq: latestEvent.nextCursor.eventSeq,
-        };
-        eventStateMap.set(eventType, lastEventState);
+      // Check parse data number match
+      if (eventObjects.length === eventData.length) {
+        console.log(
+          `[${eventName}]: create <${eventObjects.length}> events, <${execTime}> sec.`,
+        );
+
+        // Save Next Cursor data
+        if (eventObjects.length > 0) {
+          const lastEventState: EventState = {
+            eventType: eventType,
+            nextCursorTxDigest: latestEvent.nextCursor.txDigest,
+            nextCursorEventSeq: latestEvent.nextCursor.eventSeq,
+          };
+          eventStateMap.set(eventType, lastEventState);
+        }
+      } else {
+        eventObjects.length = 0;
+        hasNextPage = true;
+        console.error(
+          `[${eventName}]: Parse <${eventObjects.length}> events didn't match, <${execTime}> sec.`,
+        );
       }
     } catch (err) {
       console.error(
