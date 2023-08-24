@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - feat/deploy
 
 jobs:
   build:
@@ -35,11 +36,8 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            docker stop scallop-sui-indexer-testnet
             docker stop scallop-sui-indexer-mainnet
-            docker rm scallop-sui-indexer-testnet
             docker rm scallop-sui-indexer-mainnet
             docker rmi nathan7scallop/scallop-sui-indexer:latest
             docker pull nathan7scallop/scallop-sui-indexer:latest
-            docker run -d --restart unless-stopped --name scallop-sui-indexer-testnet --env-file /usr/local/src/envs/.prod-testnet.env nathan7scallop/scallop-sui-indexer:latest
             docker run -d --restart unless-stopped --name scallop-sui-indexer-mainnet --env-file /usr/local/src/envs/.prod-mainnet.env nathan7scallop/scallop-sui-indexer:latest
