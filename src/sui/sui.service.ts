@@ -194,7 +194,7 @@ export class SuiService {
     if (SuiService._queryCount >= this.RPC_QPS_LIMIT) {
       // Delay 1 sec to avoid query limit
       console.debug(`Delay ${this.RPC_DELAY_SECONDS} sec to avoid query limit`);
-      await delay(this.RPC_DELAY_SECONDS);
+      await delay(this.RPC_DELAY_SECONDS * 1000);
       SuiService._queryCount = 0;
     }
   }
