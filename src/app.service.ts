@@ -73,12 +73,26 @@ export class AppService {
             changedEventStateMap,
           );
 
+        // get obligation versions
+        const obligationIds = [];
+        for (const obligation of obligations) {
+          obligationIds.push(obligation.obligation_id);
+        }
+        const obligationVersionsMap =
+          await this._suiService.getObligationVersions(obligationIds);
+
         const transactionSession = await this.connection.startSession();
         transactionSession.startTransaction();
         try {
           // update obligations
           const startTime = new Date().getTime();
           for (const obligation of obligations) {
+            // update obligation version
+            if (obligationVersionsMap.has(obligation.obligation_id)) {
+              obligation.version = obligationVersionsMap.get(
+                obligation.obligation_id,
+              );
+            }
             await this._obligationService.findOneAndUpdateObligation(
               obligation.obligation_id,
               obligation,
@@ -100,14 +114,16 @@ export class AppService {
               transactionSession,
             );
             console.log(
-              `[EventState]: update <${eventState.eventType.split('::')[2]}>`,
+              `[EventState]: save <${eventState.eventType.split('::')[2]}>: <${
+                eventState.nextCursorTxDigest
+              }, ${eventState.nextCursorEventSeq}>`,
             );
           }
           await transactionSession.commitTransaction();
         } catch (e) {
           await transactionSession.abortTransaction();
           console.error(
-            'Error caught while updateAllObligationCreatedEvents():',
+            'Error caught while updateObligationCreatedEvents():',
             e,
           );
         } finally {
@@ -119,81 +135,18 @@ export class AppService {
         }
 
         pageCount++;
-        if (pageCount > pageLimit) {
+        if (pageCount >= pageLimit) {
           break;
         }
       } catch (err) {
         console.error(
-          'Error caught while updateAllObligationCreatedEvents():',
+          'Error caught while updateObligationCreatedEvents():',
           err,
         );
       }
     } //end while
   }
 
-  // async updateObligationCreatedEvents(): Promise<void> {
-  //   const changedEventStateMap = new Map();
-  //   const pageLimit = 4;
-
-  //   try {
-  //     const [obligations, hasNextPage] =
-  //       await this._obligationService.getObligationsFromQueryEventByPages(
-  //         this._suiService,
-  //         changedEventStateMap,
-  //         pageLimit,
-  //       );
-
-  //     const transactionSession = await this.connection.startSession();
-  //     transactionSession.startTransaction();
-  //     try {
-  //       // update obligations
-  //       const startTime = new Date().getTime();
-  //       for (const obligation of obligations) {
-  //         await this._obligationService.findOneAndUpdateObligation(
-  //           obligation.obligation_id,
-  //           obligation,
-  //           transactionSession,
-  //         );
-  //         // console.debug(`[Obligations]: update <${obligation.obligation_id}>`);
-  //       }
-  //       const endTime = new Date().getTime();
-  //       const execTime = (endTime - startTime) / 1000;
-  //       console.log(
-  //         `[Obligations]: update <${obligations.length}>, <${execTime}> secs.`,
-  //       );
-  //       console.log(`[Obligations]: hasNextPage <${hasNextPage}>`);
-
-  //       // Update event states
-  //       for (const eventState of changedEventStateMap.values()) {
-  //         await this._eventStateService.findOneByEventTypeAndUpdateEventState(
-  //           eventState.eventType,
-  //           eventState,
-  //           transactionSession,
-  //         );
-  //         console.log(
-  //           `[EventState]: update <${eventState.eventType.split('::')[2]}>`,
-  //         );
-  //       }
-  //       await transactionSession.commitTransaction();
-  //     } catch (e) {
-  //       await transactionSession.abortTransaction();
-  //       console.error(
-  //         'Error caught while updateAllObligationCreatedEvents():',
-  //         e,
-  //       );
-  //     } finally {
-  //       transactionSession.endSession();
-  //     }
-
-  //     // if (!hasNextPage) {
-  //     //   break;
-  //     // }
-  //   } catch (err) {
-  //     console.error('Error caught while updateObligationCreatedEvents():', err);
-  //   }
-  // }
-
-  //TODO: separate query and update of collaterals and debts
   async updateLiqudationRelatedEvents(
     hasCollateralsChanged = false,
     hasDebtsChanged = false,
@@ -203,8 +156,7 @@ export class AppService {
     let execTime;
     try {
       // update created obligations first
-      // await this.updateAllObligationCreatedEvents();
-      await this.updateObligationCreatedEvents(0);
+      await this.updateObligationCreatedEvents();
 
       const changedEventStateMap = new Map();
       const deposits = await this._depositService.getDepositsFromQueryEvent(
@@ -250,20 +202,28 @@ export class AppService {
       }
 
       // Get unique obligations
+      const collateralChangedObligations = new Set<string>();
+      const debtChangedObligations = new Set<string>();
       const changedObligations = new Set<string>();
       for (const deposit of deposits) {
+        collateralChangedObligations.add(deposit.obligation_id);
         changedObligations.add(deposit.obligation_id);
       }
       for (const withdraw of withdraws) {
+        collateralChangedObligations.add(withdraw.obligation_id);
         changedObligations.add(withdraw.obligation_id);
       }
       for (const borrow of borrows) {
+        debtChangedObligations.add(borrow.obligation_id);
         changedObligations.add(borrow.obligation_id);
       }
       for (const repay of repays) {
+        debtChangedObligations.add(repay.obligation_id);
         changedObligations.add(repay.obligation_id);
       }
       for (const liquidate of liquidates) {
+        collateralChangedObligations.add(liquidate.obligation_id);
+        debtChangedObligations.add(liquidate.obligation_id);
         changedObligations.add(liquidate.obligation_id);
       }
 
@@ -277,54 +237,46 @@ export class AppService {
       }
 
       let obligationCollateralsMap;
+      let collateralsParentIdMap;
       let obligationDebtsMap;
+      let debtsParentIdMap;
       // get Collaterals
       startTime = new Date().getTime();
       if (hasCollateralsChanged) {
-        obligationCollateralsMap =
+        [obligationCollateralsMap, collateralsParentIdMap] =
           await this._obligationService.getCollateralsInObligationMap(
             this._suiService,
-            changedObligationDBMap,
+            collateralChangedObligations,
           );
-        // hasCollateralsChanged = false;
       }
       endTime = new Date().getTime();
       execTime = (endTime - startTime) / 1000;
       console.log(
-        `[Collaterals]: getCollateralsInObligationMap, length<${obligationCollateralsMap.size}> <${execTime}> secs.`,
+        `[Collaterals]: getCollateralsInObligationMap, chg<${collateralChangedObligations.size}>, col<${obligationCollateralsMap.size}>, parent<${collateralsParentIdMap.size}> <${execTime}> secs.`,
       );
 
       // get Debts
       startTime = new Date().getTime();
       if (hasDebtsChanged) {
-        obligationDebtsMap =
+        [obligationDebtsMap, debtsParentIdMap] =
           await this._obligationService.getDebtsInObligationMap(
             this._suiService,
-            changedObligationDBMap,
+            debtChangedObligations,
           );
-        // hasDebtsChanged = false;
       }
       endTime = new Date().getTime();
       execTime = (endTime - startTime) / 1000;
       console.log(
-        `[Debts]: getDebtsInObligationMap, length<${obligationDebtsMap.size}>  <${execTime}> secs.`,
+        `[Debts]: getDebtsInObligationMap, chg<${debtChangedObligations.size}>, col<${obligationDebtsMap.size}>, parent<${debtsParentIdMap.size}> <${execTime}> secs.`,
       );
 
       const transactionSession = await this.connection.startSession();
       transactionSession.startTransaction();
       try {
-        // const changedObligationMap = new Map();
         // update deposits
         let startTime = new Date().getTime();
         for (const deposit of deposits) {
           const obligation = changedObligationDBMap.get(deposit.obligation_id);
-          // if (obligation === undefined) {
-          //   obligation = await this._obligationService.findByObligation(
-          //     deposit.obligation_id,
-          //     transactionSession,
-          //   );
-          //   changedObligationMap.set(obligation.obligation_id, obligation);
-          // }
           deposit.obligation = obligation;
           await this._depositService.create(deposit, transactionSession);
         }
@@ -338,13 +290,6 @@ export class AppService {
         startTime = new Date().getTime();
         for (const withdraw of withdraws) {
           const obligation = changedObligationDBMap.get(withdraw.obligation_id);
-          // if (obligation === undefined) {
-          //   obligation = await this._obligationService.findByObligation(
-          //     withdraw.obligation_id,
-          //     transactionSession,
-          //   );
-          //   changedObligationMap.set(obligation.obligation_id, obligation);
-          // }
           withdraw.obligation = obligation;
           await this._withdrawService.create(withdraw, transactionSession);
         }
@@ -358,13 +303,6 @@ export class AppService {
         startTime = new Date().getTime();
         for (const borrow of borrows) {
           const obligation = changedObligationDBMap.get(borrow.obligation_id);
-          // if (obligation === undefined) {
-          //   obligation = await this._obligationService.findByObligation(
-          //     borrow.obligation_id,
-          //     transactionSession,
-          //   );
-          //   changedObligationMap.set(obligation.obligation_id, obligation);
-          // }
           borrow.obligation = obligation;
           await this._borrowService.create(borrow, transactionSession);
         }
@@ -378,13 +316,6 @@ export class AppService {
         startTime = new Date().getTime();
         for (const repay of repays) {
           const obligation = changedObligationDBMap.get(repay.obligation_id);
-          // if (obligation === undefined) {
-          //   obligation = await this._obligationService.findByObligation(
-          //     repay.obligation_id,
-          //     transactionSession,
-          //   );
-          //   changedObligationMap.set(obligation.obligation_id, obligation);
-          // }
           repay.obligation = obligation;
           await this._repayService.create(repay, transactionSession);
         }
@@ -398,13 +329,6 @@ export class AppService {
           const obligation = changedObligationDBMap.get(
             liquidate.obligation_id,
           );
-          // if (obligation === undefined) {
-          //   obligation = await this._obligationService.findByObligation(
-          //     liquidate.obligation_id,
-          //     transactionSession,
-          //   );
-          //   changedObligationMap.set(obligation.obligation_id, obligation);
-          // }
           liquidate.obligation = obligation;
           await this._liquidateService.create(liquidate, transactionSession);
         }
@@ -421,10 +345,14 @@ export class AppService {
           let needUpdate = false;
           if (obligationCollateralsMap.has(obligationId)) {
             obligation.collaterals = obligationCollateralsMap.get(obligationId);
+            obligation.collaterals_parent_id =
+              collateralsParentIdMap.get(obligationId);
+
             needUpdate = true;
           }
           if (obligationDebtsMap.has(obligationId)) {
             obligation.debts = obligationDebtsMap.get(obligationId);
+            obligation.debts_parent_id = debtsParentIdMap.get(obligationId);
             needUpdate = true;
           }
 
@@ -440,107 +368,24 @@ export class AppService {
           );
           dbObligation.collaterals = obligation.collaterals;
           dbObligation.debts = obligation.debts;
+          dbObligation.collaterals_parent_id = obligation.collaterals_parent_id;
+          dbObligation.debts_parent_id = obligation.debts_parent_id;
 
-          const savedObligation =
-            await this._obligationService.findOneAndUpdateObligation(
-              obligationId,
-              dbObligation,
-              transactionSession,
-            );
-          // console.log(`[Obligations]: update <${obligation.obligation_id}>`);
-          console.log(
-            `[CollateralsDebts]: update collaterals<${obligation.collaterals.length}>, debts<${obligation.debts.length}> in <${savedObligation.obligation_id}>`,
+          // const savedObligation =
+          await this._obligationService.findOneAndUpdateObligation(
+            obligationId,
+            dbObligation,
+            transactionSession,
           );
+          // console.log(
+          //   `[CollateralsDebts]: update collaterals<${obligation.collaterals.length}>, debts<${obligation.debts.length}> in <${savedObligation.obligation_id}>`,
+          // );
         }
         endTime = new Date().getTime();
         execTime = (endTime - startTime) / 1000;
         console.log(
-          `[CollateralsDebts]: updateCollateralsDebtsInObligationMap, <${execTime}> secs.`,
+          `[CollateralsDebts]: updateCollateralsDebtsInObligationMap <${updatingObligationMap.size}> <${execTime}> secs.`,
         );
-
-        // Update obligations with collaterals and debts changed
-        // startTime = new Date().getTime();
-        // if (hasCollateralsChanged) {
-        //   for (const [obligationId, collaterals] of obligationCollateralsMap) {
-        //     // let obligation = changedObligationDBMap.get(obligationId);
-        //     // if (obligation === undefined) {
-        //     //   obligation = await this._obligationService.findByObligation(
-        //     //     obligationId,
-        //     //     transactionSession,
-        //     //   );
-        //     //   changedObligationMap.set(obligation.obligation_id, obligation);
-        //     // }
-
-        //     let obligation;
-        //     obligation = await this._obligationService.findByObligation(
-        //       obligationId,
-        //       transactionSession,
-        //     );
-        //     if (obligation) {
-        //       obligation.collaterals = collaterals;
-        //     } else {
-        //       obligation = {
-        //         obligation_id: obligationId,
-        //         collaterals: collaterals,
-        //       };
-        //     }
-        //     const savedObligation =
-        //       await this._obligationService.findOneAndUpdateObligation(
-        //         obligation.obligation_id,
-        //         obligation,
-        //       );
-        //     console.log(
-        //       `[Collaterals]: update <${collaterals.length}> in <${savedObligation.obligation_id}>`,
-        //     );
-        //   }
-        //   hasCollateralsChanged = false;
-        // }
-        // endTime = new Date().getTime();
-        // execTime = (endTime - startTime) / 1000;
-        // console.log(
-        //   `[Collaterals]: updateCollateralsInObligationMap, <${execTime}> secs.`,
-        // );
-
-        // startTime = new Date().getTime();
-        // if (hasDebtsChanged) {
-        //   for (const [obligationId, debts] of obligationDebtsMap) {
-        //     // let obligation = changedObligationDBMap.get(obligationId);
-        //     // if (obligation === undefined) {
-        //     //   obligation = await this._obligationService.findByObligation(
-        //     //     obligationId,
-        //     //     transactionSession,
-        //     //   );
-        //     // }
-        //     let obligation;
-        //     obligation = await this._obligationService.findByObligation(
-        //       obligationId,
-        //       transactionSession,
-        //     );
-
-        //     if (obligation) {
-        //       obligation.debts = debts;
-        //     } else {
-        //       obligation = {
-        //         obligation_id: obligationId,
-        //         debts: debts,
-        //       };
-        //     }
-
-        //     const savedObligation =
-        //       await this._obligationService.findOneAndUpdateObligation(
-        //         obligation.obligation_id,
-        //         obligation,
-        //       );
-        //     console.log(
-        //       `[Debts]: update <${debts.length}> in <${savedObligation.obligation_id}>`,
-        //     );
-        //   }
-
-        //   hasDebtsChanged = false;
-        // }
-        // endTime = new Date().getTime();
-        // execTime = (endTime - startTime) / 1000;
-        // console.log(`[Debts]: updateDebtsInObligationMap, <${execTime}> secs.`);
 
         // Update event states
         for (const eventState of changedEventStateMap.values()) {
@@ -550,7 +395,9 @@ export class AppService {
             transactionSession,
           );
           console.log(
-            `[EventState]: update <${eventState.eventType.split('::')[2]}>`,
+            `[EventState]: save <${eventState.eventType.split('::')[2]}>: <${
+              eventState.nextCursorTxDigest
+            }, ${eventState.nextCursorEventSeq}>`,
           );
         }
         if (transactionSession) {
@@ -568,211 +415,6 @@ export class AppService {
       }
     } catch (err) {
       console.error('Error caught while updateLiqudationRelatedEvents():', err);
-    }
-  }
-
-  async updateLiqudatorRelatedEvents(
-    hasCollateralsChanged = false,
-    hasDebtsChanged = false,
-  ): Promise<void> {
-    try {
-      // update created obligations first
-      await this.updateObligationCreatedEvents(9999);
-
-      const changedEventStateMap = new Map();
-      const deposits = await this._depositService.getDepositsFromQueryEvent(
-        this._suiService,
-        changedEventStateMap,
-      );
-      if (deposits.length > 0) {
-        hasCollateralsChanged = true;
-      }
-
-      const withdraws = await this._withdrawService.getWithdrawsFromQueryEvent(
-        this._suiService,
-        changedEventStateMap,
-      );
-      if (withdraws.length > 0) {
-        hasCollateralsChanged = true;
-      }
-
-      const borrows = await this._borrowService.getBorrowsFromQueryEvent(
-        this._suiService,
-        changedEventStateMap,
-      );
-      if (borrows.length > 0) {
-        hasDebtsChanged = true;
-      }
-
-      const repays = await this._repayService.getRepaysFromQueryEvent(
-        this._suiService,
-        changedEventStateMap,
-      );
-      if (repays.length > 0) {
-        hasDebtsChanged = true;
-      }
-
-      const liquidates =
-        await this._liquidateService.getLiquidatesFromQueryEvent(
-          this._suiService,
-          changedEventStateMap,
-        );
-      if (liquidates.length > 0) {
-        hasCollateralsChanged = true;
-        hasDebtsChanged = true;
-      }
-
-      const transactionSession = await this.connection.startSession();
-      transactionSession.startTransaction();
-      try {
-        const changedObligationMap = new Map();
-        // update deposits
-        let startTime = new Date().getTime();
-        for (const deposit of deposits) {
-          let obligation = changedObligationMap.get(deposit.obligation_id);
-          if (obligation === undefined) {
-            obligation = await this._obligationService.findByObligation(
-              deposit.obligation_id,
-              transactionSession,
-            );
-            changedObligationMap.set(obligation.obligation_id, obligation);
-          }
-          deposit.obligation = obligation;
-          await this._depositService.create(deposit, transactionSession);
-        }
-        let endTime = new Date().getTime();
-        let execTime = (endTime - startTime) / 1000;
-        console.log(
-          `[Deposits]: update <${deposits.length}>, <${execTime}> secs.`,
-        );
-
-        // update withdraws
-        startTime = new Date().getTime();
-        for (const withdraw of withdraws) {
-          let obligation = changedObligationMap.get(withdraw.obligation_id);
-          if (obligation === undefined) {
-            obligation = await this._obligationService.findByObligation(
-              withdraw.obligation_id,
-              transactionSession,
-            );
-            changedObligationMap.set(obligation.obligation_id, obligation);
-          }
-          withdraw.obligation = obligation;
-          await this._withdrawService.create(withdraw, transactionSession);
-        }
-        endTime = new Date().getTime();
-        execTime = (endTime - startTime) / 1000;
-        console.log(
-          `[Withdraws]: update <${withdraws.length}>, <${execTime}> secs.`,
-        );
-
-        // update borrows
-        startTime = new Date().getTime();
-        for (const borrow of borrows) {
-          let obligation = changedObligationMap.get(borrow.obligation_id);
-          if (obligation === undefined) {
-            obligation = await this._obligationService.findByObligation(
-              borrow.obligation_id,
-              transactionSession,
-            );
-            changedObligationMap.set(obligation.obligation_id, obligation);
-          }
-          borrow.obligation = obligation;
-          await this._borrowService.create(borrow, transactionSession);
-        }
-        endTime = new Date().getTime();
-        execTime = (endTime - startTime) / 1000;
-        console.log(
-          `[Borrows]: update <${borrows.length}>, <${execTime}> secs.`,
-        );
-
-        // update repays
-        startTime = new Date().getTime();
-        for (const repay of repays) {
-          let obligation = changedObligationMap.get(repay.obligation_id);
-          if (obligation === undefined) {
-            obligation = await this._obligationService.findByObligation(
-              repay.obligation_id,
-              transactionSession,
-            );
-            changedObligationMap.set(obligation.obligation_id, obligation);
-          }
-          repay.obligation = obligation;
-          await this._repayService.create(repay, transactionSession);
-        }
-        endTime = new Date().getTime();
-        execTime = (endTime - startTime) / 1000;
-        console.log(`[Repays]: update <${repays.length}>, <${execTime}> secs.`);
-
-        // update liquidates
-        startTime = new Date().getTime();
-        for (const liquidate of liquidates) {
-          let obligation = changedObligationMap.get(liquidate.obligation_id);
-          if (obligation === undefined) {
-            obligation = await this._obligationService.findByObligation(
-              liquidate.obligation_id,
-              transactionSession,
-            );
-            changedObligationMap.set(obligation.obligation_id, obligation);
-          }
-          liquidate.obligation = obligation;
-          await this._liquidateService.create(liquidate, transactionSession);
-        }
-        endTime = new Date().getTime();
-        execTime = (endTime - startTime) / 1000;
-        console.log(
-          `[Liquidates]: update <${liquidates.length}>, <${execTime}> secs.`,
-        );
-
-        // Update obligations with collaterals and debts changed
-        startTime = new Date().getTime();
-        if (hasCollateralsChanged) {
-          await this._obligationService.updateCollateralsInObligationMap(
-            this._suiService,
-            changedObligationMap,
-            transactionSession,
-          );
-          hasCollateralsChanged = false;
-        }
-        endTime = new Date().getTime();
-        execTime = (endTime - startTime) / 1000;
-        console.log(
-          `[Collaterals]: updateCollateralsInObligationMap, <${execTime}> secs.`,
-        );
-
-        startTime = new Date().getTime();
-        if (hasDebtsChanged) {
-          await this._obligationService.updateDebtsInObligationMap(
-            this._suiService,
-            changedObligationMap,
-            transactionSession,
-          );
-          hasDebtsChanged = false;
-        }
-        endTime = new Date().getTime();
-        execTime = (endTime - startTime) / 1000;
-        console.log(`[Debts]: updateDebtsInObligationMap, <${execTime}> secs.`);
-
-        // Update event states
-        for (const eventState of changedEventStateMap.values()) {
-          await this._eventStateService.findOneByEventTypeAndUpdateEventState(
-            eventState.eventType,
-            eventState,
-            transactionSession,
-          );
-          console.log(
-            `[EventState]: update <${eventState.eventType.split('::')[2]}>`,
-          );
-        }
-        await transactionSession.commitTransaction();
-      } catch (e) {
-        await transactionSession.abortTransaction();
-        console.error('Error caught while processLiqudatorRelatedEvents():', e);
-      } finally {
-        transactionSession.endSession();
-      }
-    } catch (err) {
-      console.error('Error caught while updateLiqudatorRelatedEvents():', err);
     }
   }
 
@@ -817,7 +459,9 @@ export class AppService {
             flashloanSession,
           );
           console.log(
-            `[EventState]: update <${eventState.eventType.split('::')[2]}>`,
+            `[EventState]: save <${eventState.eventType.split('::')[2]}>: <${
+              eventState.nextCursorTxDigest
+            }, ${eventState.nextCursorEventSeq}>`,
           );
         }
 
@@ -887,7 +531,9 @@ export class AppService {
             lendingSession,
           );
           console.log(
-            `[EventState]: update <${eventState.eventType.split('::')[2]}>`,
+            `[EventState]: save <${eventState.eventType.split('::')[2]}>: <${
+              eventState.nextCursorTxDigest
+            }, ${eventState.nextCursorEventSeq}>`,
           );
         }
         await lendingSession.commitTransaction();
@@ -951,8 +597,6 @@ export class AppService {
       SuiService.resetQueryCount();
 
       // Get & update liquidator related events
-      // await this.updateLiqudatorRelatedEvents();
-      //TODO: test this
       await this.updateLiqudationRelatedEvents();
 
       // update borrow dynamics

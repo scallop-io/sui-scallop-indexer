@@ -246,7 +246,7 @@ export class SuiService {
         collaterals.push(collateral);
       }
     } catch (e) {
-      console.error(`Error caught while getCollaterals(): ${e}`);
+      console.error('Error caught while getCollaterals():', e);
     }
     return collaterals;
   }
@@ -285,7 +285,7 @@ export class SuiService {
         debts.push(debt);
       }
     } catch (e) {
-      console.error(`Error caught while getDebts(): ${e}`);
+      console.error('Error caught while getDebts():', e);
     }
     return debts;
   }
@@ -327,7 +327,7 @@ export class SuiService {
         }
       }
     } catch (e) {
-      console.error(`Error caught while getBorrowDynamics(): ${e}`);
+      console.error('Error caught while getBorrowDynamics():', e);
     }
     return borrowDynamics;
   }
@@ -441,7 +441,8 @@ export class SuiService {
       }
     } catch (err) {
       console.error(
-        `Error caught while getEventsFromQuery() for ${eventName}: ${err}`,
+        `Error caught while getEventsFromQuery() for ${eventName}: `,
+        err,
       );
     }
     return [eventObjects, hasNextPage];
@@ -463,110 +464,6 @@ export class SuiService {
     return eventObjects;
   }
 
-  // async getEventsFromQuery(
-  //   eventType: string,
-  //   eventStateMap: Map<string, EventState>,
-  //   createCallback: (item: any) => Promise<any>,
-  //   pageLimit = this.SUI_PAGE_LIMIT,
-  // ): Promise<any[]> {
-  //   const eventObjects = [];
-  //   const eventName = eventType.split('::')[2];
-  //   try {
-  //     const startTime = new Date().getTime();
-  //     // Find if there is cursor stored in DB
-  //     const eventState = await this._eventStateService.findByEventType(
-  //       eventType,
-  //     );
-
-  //     let cursorTxDigest = undefined;
-  //     let cursorEventSeq = undefined;
-  //     if (eventState !== null) {
-  //       cursorTxDigest = eventState.nextCursorTxDigest;
-  //       cursorEventSeq = eventState.nextCursorEventSeq;
-  //     }
-
-  //     let hasNextPage = true;
-  //     let latestEvent: PaginatedEvents;
-  //     const eventData = [];
-  //     let pageCount = 0;
-  //     while (hasNextPage) {
-  //       if (cursorTxDigest === undefined || cursorEventSeq === undefined) {
-  //         latestEvent =
-  //           await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
-  //             query: {
-  //               MoveEventType: eventType,
-  //             },
-  //             limit: this.SUI_QUERY_LIMIT,
-  //             order: 'ascending',
-  //           });
-  //         console.debug(`[${eventName}]: query from <start>.`);
-  //       } else {
-  //         latestEvent =
-  //           await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
-  //             query: {
-  //               MoveEventType: eventType,
-  //             },
-  //             cursor: {
-  //               txDigest: cursorTxDigest,
-  //               eventSeq: cursorEventSeq,
-  //             },
-  //             limit: this.SUI_QUERY_LIMIT,
-  //             order: 'ascending',
-  //           });
-  //         console.debug(
-  //           `[${eventName}]: query from cursor <${cursorTxDigest}>, seq<${cursorEventSeq}>`,
-  //         );
-  //       }
-  //       await this.checkRPCLimit();
-
-  //       for (const element of latestEvent.data) {
-  //         eventData.push(element);
-
-  //         cursorTxDigest = element.id.txDigest;
-  //         cursorEventSeq = element.id.eventSeq;
-  //       }
-
-  //       hasNextPage = latestEvent.hasNextPage;
-  //       if (hasNextPage === true) {
-  //         cursorTxDigest = latestEvent.nextCursor.txDigest;
-  //         cursorEventSeq = latestEvent.nextCursor.eventSeq;
-  //       }
-
-  //       pageCount++;
-  //       if (pageCount >= pageLimit) {
-  //         break;
-  //       }
-  //     } //end of while
-
-  //     // Prase data
-  //     for (const item of eventData) {
-  //       const newEvent = await createCallback(item);
-  //       eventObjects.push(newEvent);
-  //       console.log(`[${eventName}]: create <${newEvent.obligation_id}>`);
-  //     }
-  //     const endTime = new Date().getTime();
-  //     const execTime = (endTime - startTime) / 1000;
-  //     console.log(
-  //       `[${eventName}]: create <${eventObjects.length}> events, <${execTime}> sec.`,
-  //     );
-
-  //     // Save Next Cursor data
-  //     if (eventObjects.length > 0) {
-  //       const lastEventState: EventState = {
-  //         eventType: eventType,
-  //         nextCursorTxDigest: latestEvent.nextCursor.txDigest,
-  //         nextCursorEventSeq: latestEvent.nextCursor.eventSeq,
-  //       };
-  //       eventStateMap.set(eventType, lastEventState);
-  //     }
-  //   } catch (err) {
-  //     console.error(
-  //       `Error caught while getEventsFromQuery() for ${eventName}: ${err}`,
-  //     );
-  //   }
-  //   return eventObjects;
-  // }
-
   async getObligationVersion(obligation_id: string): Promise<string> {
     const obj = await SuiService.getSuiKit()
       .provider()
@@ -583,6 +480,35 @@ export class SuiService {
     const version = obj.data.owner['Shared']['initial_shared_version'];
 
     return version;
+  }
+
+  // get multiple obligation versions
+  async getObligationVersions(
+    obligationIds: string[],
+  ): Promise<Map<string, string>> {
+    const obligationVersions = new Map<string, string>();
+    try {
+      const keys = [...obligationIds];
+      while (keys.length) {
+        // Get the first batch(50 keys), and update 'keys' to contain the remaining keys
+        const currentBatchOfKeys = keys.splice(
+          0,
+          Math.min(this.SUI_QUERY_LIMIT, keys.length),
+        );
+
+        const obligationObjs = await SuiService.getSuiKit().getObjects(
+          currentBatchOfKeys,
+        );
+        await this.checkRPCLimit();
+        for (const obj of obligationObjs) {
+          obligationVersions.set(obj.objectId, obj.objectVersion.toString());
+        }
+      } //end while
+    } catch (e) {
+      console.error('Error caught while getObligationVersions():', e);
+    }
+
+    return obligationVersions;
   }
 
   async getSuiName(address: string): Promise<string> {
