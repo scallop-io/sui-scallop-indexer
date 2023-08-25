@@ -155,10 +155,106 @@ export class ObligationService {
     );
   }
 
+  //TODO: get collateral and debt from obligation
+  async getCollateralsInObligationMap(
+    suiService: SuiService,
+    changedObligationDBMap: Map<string, ObligationDocument>,
+  ): Promise<Map<string, any>> {
+    const obligationCollateralsMap = new Map<string, any>();
+    try {
+      const keys = [...changedObligationDBMap.keys()];
+      while (keys.length) {
+        // Get the first batch(50 keys), and update 'keys' to contain the remaining keys
+        const currentBatchOfKeys = keys.splice(
+          0,
+          Math.min(suiService.SUI_QUERY_LIMIT, keys.length),
+        );
+
+        // const obligationObjs = await SuiService.getSuiKit().getObjects(keys);
+        const obligationObjs = await SuiService.getSuiKit().getObjects(
+          currentBatchOfKeys,
+        );
+        await suiService.checkRPCLimit();
+        for (const obligationObj of obligationObjs) {
+          const parentId =
+            obligationObj.objectFields['collaterals'].fields.table.fields.id.id;
+          const collaterals = await suiService.getCollaterals(parentId);
+
+          obligationCollateralsMap.set(obligationObj.objectId, collaterals);
+
+          // const obligation = await this.findByObligation(
+          //   obligationObj.objectId,
+          // );
+          // obligation.collaterals = collaterals;
+
+          // const savedObligation = await this.findOneAndUpdateObligation(
+          //   obligation.obligation_id,
+          //   obligation,
+          // );
+          // console.log(
+          //   `[Collaterals]: update <${collaterals.length}> in <${savedObligation.obligation_id}>`,
+          // );
+        }
+      } //end while
+    } catch (e) {
+      console.error('Error caught while getCollateralsInObligationMap():', e);
+      throw e;
+    }
+    return obligationCollateralsMap;
+  }
+
+  async getDebtsInObligationMap(
+    suiService: SuiService,
+    changedObligationDBMap: Map<string, ObligationDocument>,
+  ): Promise<Map<string, any>> {
+    const obligationDebtsMap = new Map<string, any>();
+    try {
+      const keys = [...changedObligationDBMap.keys()];
+      while (keys.length) {
+        // Get the first batch(50 keys), and update 'keys' to contain the remaining keys
+        const currentBatchOfKeys = keys.splice(
+          0,
+          Math.min(suiService.SUI_QUERY_LIMIT, keys.length),
+        );
+        const obligationObjs = await SuiService.getSuiKit().getObjects(
+          currentBatchOfKeys,
+        );
+        await suiService.checkRPCLimit();
+        for (const obligationObj of obligationObjs) {
+          const parentId =
+            obligationObj.objectFields['debts'].fields.table.fields.id.id;
+          const debts = await suiService.getDebts(parentId);
+
+          obligationDebtsMap.set(obligationObj.objectId, debts);
+
+          // const obligation = await this.findByObligation(
+          //   obligationObj.objectId,
+          //   session,
+          // );
+          // obligation.debts = debts;
+
+          // const savedObligation = await this.findOneAndUpdateObligation(
+          //   obligation.obligation_id,
+          //   obligation,
+          //   session,
+          // );
+          // console.log(
+          //   `[Debts]: update <${debts.length}> in <${savedObligation.obligation_id}>`,
+          // );
+        } //end while
+      }
+    } catch (e) {
+      console.error('Error caught while getDebtsInObligationMap():', e);
+      throw e;
+    }
+    return obligationDebtsMap;
+  }
+
   // get created obligations
   async getObligationsFromQueryEventByPages(
     suiService: SuiService,
     eventStateMap: Map<string, EventState>,
+    pageLimit = suiService.SUI_PAGE_LIMIT,
   ): Promise<[any[], boolean]> {
     const eventId = await suiService.getObligationCreatedEventId();
     return await suiService.getEventsFromQueryByPages(
@@ -177,6 +273,7 @@ export class ObligationService {
           version: version,
         };
       },
+      pageLimit,
     );
   }
 

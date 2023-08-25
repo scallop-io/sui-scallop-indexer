@@ -22,16 +22,10 @@ export class SuiService {
   private ADDRESSES_ID = process.env.ADDRESSES_ID || '6462a088a7ace142bb6d7e9b';
   private NETWORK = process.env.NETWORK || 'testnet';
 
-  private MARKET_ID =
-    process.env.MARKET_ID ||
-    '0x91b18f2f0858d3da3b5d48010e5bb59d51e033bcc673e040bd3bdec2b232b297';
-  private PROTOCOL_ID =
-    process.env.PROTOCOL_ID ||
-    '0xa9cdb9d8e80465c75dcdad061cf1d462a9cf662da071412ca178d579d8df2855';
-  // private COINS = [
-  //   '0000000000000000000000000000000000000000000000000000000000000002::sui::SUI',
-  //   '5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
-  // ];
+  private MARKET_ID = process.env.MARKET_ID;
+  private PROTOCOL_ID = process.env.PROTOCOL_ID;
+  private INIT_PROTOCOL_ID =
+    '0xefe8b36d5b2e43728cc323298626b83177803521d195cfb11e15b910e892fddf';
 
   private _addresses = undefined;
   private _protocolId = undefined;
@@ -79,29 +73,31 @@ export class SuiService {
 
   public async getMarketId() {
     if (!this._marketId) {
-      const address = await this.getAddresses();
-      if (!this._addresses) {
+      if (this.MARKET_ID) {
         this._marketId = this.MARKET_ID;
       } else {
-        this._marketId = address[this.NETWORK]['core']['market'];
+        const address = await this.getAddresses();
+        if (this._addresses) {
+          this._marketId = address[this.NETWORK]['core']['market'];
+        }
       }
+      console.log(`[Market-Id]: ${this._marketId}`);
     }
     return this._marketId;
   }
 
-  // public getCoinTypes() {
-  //   return this.COINS;
-  // }
-
   private async getProtocolId() {
     if (!this._protocolId) {
-      const address = await this.getAddresses();
-      if (!this._addresses) {
-        return this.PROTOCOL_ID;
+      if (this.PROTOCOL_ID) {
+        this._protocolId = this.PROTOCOL_ID;
       } else {
-        this._protocolId =
-          address[this.NETWORK]['core']['packages']['protocol']['id'];
+        const address = await this.getAddresses();
+        if (this._addresses) {
+          this._protocolId =
+            address[this.NETWORK]['core']['packages']['protocol']['id'];
+        }
       }
+      console.log(`[Protocol-Id]: ${this._protocolId}`);
     }
     return this._protocolId;
   }
