@@ -594,7 +594,7 @@ export class AppService {
   async loopQueryEvents(): Promise<void> {
     while (true) {
       const start = new Date().getTime();
-      SuiService.resetQueryCount();
+      // SuiService.resetQueryCount();
 
       // Get & update liquidator related events
       await this.updateLiqudationRelatedEvents();
