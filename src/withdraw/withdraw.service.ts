@@ -25,8 +25,10 @@ export class WithdrawService {
     suiService: SuiService,
     eventStateMap: Map<string, EventState>,
   ): Promise<any[]> {
+    const eventId = await suiService.getCollateralWithdrawEventId();
     return await suiService.getEventsFromQuery(
-      process.env.EVENT_COLLATERAL_WITHDRAW,
+      // process.env.EVENT_COLLATERAL_WITHDRAW,
+      eventId,
       eventStateMap,
       async (item) => {
         return {

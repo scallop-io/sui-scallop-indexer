@@ -25,8 +25,10 @@ export class RepayService {
     suiService: SuiService,
     eventStateMap: Map<string, EventState>,
   ): Promise<any[]> {
+    const eventId = await suiService.getRepayEventId();
     return await suiService.getEventsFromQuery(
-      process.env.EVENT_REPAY,
+      // process.env.EVENT_REPAY,
+      eventId,
       eventStateMap,
       async (item) => {
         return {
