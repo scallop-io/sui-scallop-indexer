@@ -267,7 +267,7 @@ export class AppService {
       endTime = new Date().getTime();
       execTime = (endTime - startTime) / 1000;
       console.log(
-        `[Debts]: getDebtsInObligationMap, chg<${debtChangedObligations.size}>, col<${obligationDebtsMap.size}>, parent<${debtsParentIdMap.size}> <${execTime}> secs.`,
+        `[Debts]: getDebtsInObligationMap, chg<${debtChangedObligations?.size || 0}>, col<${obligationDebtsMap?.size || 0}>, parent<${debtsParentIdMap?.size || 0}> <${execTime}> secs.`,
       );
 
       const transactionSession = await this.connection.startSession();
