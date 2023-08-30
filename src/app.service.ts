@@ -242,10 +242,10 @@ export class AppService {
         }
       }
 
-      let obligationCollateralsMap;
-      let collateralsParentIdMap;
-      let obligationDebtsMap;
-      let debtsParentIdMap;
+      let obligationCollateralsMap = new Map<string, any>();
+      let collateralsParentIdMap = new Map<string, any>();
+      let obligationDebtsMap = new Map<string, any>();
+      let debtsParentIdMap = new Map<string, any>();
       // get Collaterals
       if (hasCollateralsChanged) {
         startTime = new Date().getTime();
