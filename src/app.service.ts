@@ -247,34 +247,35 @@ export class AppService {
       let obligationDebtsMap;
       let debtsParentIdMap;
       // get Collaterals
-      startTime = new Date().getTime();
       if (hasCollateralsChanged) {
+        startTime = new Date().getTime();
         [obligationCollateralsMap, collateralsParentIdMap] =
           await this._obligationService.getCollateralsInObligationMap(
             this._suiService,
             collateralChangedObligations,
           );
+
+        endTime = new Date().getTime();
+        execTime = (endTime - startTime) / 1000;
+        console.log(
+          `[Collaterals]: getCollateralsInObligationMap, chg<${collateralChangedObligations.size}>, col<${obligationCollateralsMap.size}>, parent<${collateralsParentIdMap.size}> <${execTime}> secs.`,
+        );
       }
-      endTime = new Date().getTime();
-      execTime = (endTime - startTime) / 1000;
-      console.log(
-        `[Collaterals]: getCollateralsInObligationMap, chg<${collateralChangedObligations.size}>, col<${obligationCollateralsMap.size}>, parent<${collateralsParentIdMap.size}> <${execTime}> secs.`,
-      );
 
       // get Debts
-      startTime = new Date().getTime();
       if (hasDebtsChanged) {
+        startTime = new Date().getTime();
         [obligationDebtsMap, debtsParentIdMap] =
           await this._obligationService.getDebtsInObligationMap(
             this._suiService,
             debtChangedObligations,
           );
+        endTime = new Date().getTime();
+        execTime = (endTime - startTime) / 1000;
+        console.log(
+          `[Debts]: getDebtsInObligationMap, chg<${debtChangedObligations.size}>, col<${obligationDebtsMap.size}>, parent<${debtsParentIdMap.size}> <${execTime}> secs.`,
+        );
       }
-      endTime = new Date().getTime();
-      execTime = (endTime - startTime) / 1000;
-      console.log(
-        `[Debts]: getDebtsInObligationMap, chg<${debtChangedObligations.size}>, col<${obligationDebtsMap.size}>, parent<${debtsParentIdMap.size}> <${execTime}> secs.`,
-      );
 
       const transactionSession = await this.connection.startSession();
       transactionSession.startTransaction();

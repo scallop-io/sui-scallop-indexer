@@ -36,7 +36,10 @@ export class StatisticService {
     'https://api.zealy.io/communities/scallopio/leaderboard?limit=100&page=0';
   private LEADERBOARD_API_KEY =
     process.env.LEADERBOARD_API_KEY || 'e0f0d9MU4aYqPvu0JRTSFP0nYhs';
-  private LEADERBOARD_LIMIT = 100;
+  private LEADERBOARD_LIMIT = Number(process.env.LEADERBOARD_LIMIT) || 100;
+  private LEADERBOARD_SUINS = Number(process.env.LEADERBOARD_SUINS) || 0;
+  private LEADERBOARD_WRITE_TO_API =
+    Number(process.env.LEADERBOARD_WRITE_TO_API) || 0;
 
   private STATISTIC_INTERVAL_SECONDS =
     Number(process.env.STATISTIC_INTERVAL_SECONDS) || 600; // default 10 mins
@@ -109,6 +112,17 @@ export class StatisticService {
     ['3a5143bb1196e3bcdfab6203d1683ae29edd26294fc8bfeafe4aaa9d2704df37', 'APT'],
   ]);
 
+  private COIN_GECKO_IDS = new Map<string, string>([
+    ['BTC', 'bitcoin'],
+    ['SUI', 'sui'],
+    ['ETH', 'ethereum'],
+    ['USDC', 'usd-coin'],
+    ['USDT', 'tether'],
+    ['SOL', 'solana'],
+    ['CETUS', 'cetus-protocol'],
+    ['APT', 'aptos'],
+  ]);
+
   static resetLogTime() {
     StatisticService._logTime = new Date().getTime();
   }
@@ -136,7 +150,7 @@ export class StatisticService {
     return decimalMultiplier;
   }
 
-  getCoinSymbol(coinType: string): string {
+  private getCoinSymbol(coinType: string): string {
     let coinSymbol = coinType.split('::')[2].toUpperCase();
     // Deal with WormholeCoin Mapping
     if (coinSymbol === 'COIN') {
@@ -144,6 +158,27 @@ export class StatisticService {
       coinSymbol = this.WORMHOLE_COINS.get(coinContract);
     }
     return coinSymbol || '';
+  }
+
+  async getCoinPriceFromCoinGecko(symbol = 'USDC'): Promise<number> {
+    let coinPrice = 0;
+    try {
+      const coinId = this.COIN_GECKO_IDS.get(symbol);
+      if (coinId) {
+        const response = await axios.get(
+          `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`,
+        );
+        if (response.data[coinId].usd) {
+          coinPrice = Number(response.data[coinId].usd);
+        }
+      }
+    } catch (error) {
+      console.error(
+        `Error caught while getCoinPriceFromCoinGecko(${symbol}): ${error}`,
+      );
+    }
+
+    return coinPrice;
   }
 
   async getCoinPriceFromBinance(symbol = 'USDT'): Promise<number> {
@@ -160,29 +195,23 @@ export class StatisticService {
         }
       }
     } catch (error) {
-      console.error('Error caught while getCoinPriceFromBinance() ', error);
+      console.error(
+        `Error caught while getCoinPriceFromBinance(${symbol}): ${error}`,
+      );
     }
 
     return coinPrice;
   }
 
   async getCoinPriceMap(): Promise<Map<string, number>> {
-    // const coinPriceMap = new Map<string, number>();
     if (this._coinPriceMap.size === 0) {
       try {
-        for (const coinType in this.COIN_DECIMALS.keys()) {
+        for (const coinType of this.COIN_DECIMALS.keys()) {
           const coinSymbol = this.getCoinSymbol(coinType);
-          const coinPrice = await this.getCoinPriceFromBinance(coinSymbol);
+          const coinPrice = await this.getCoinPriceFromCoinGecko(coinSymbol);
+          // console.log(`[CoinPrice]: ${coinSymbol} <${coinPrice}>`);
           this._coinPriceMap.set(coinType, coinPrice);
         }
-        // const coins = this._suiService.getCoinTypes();
-        // for (const coin of coins) {
-        //   const coinSymbol =
-        //     coin.split('::')[2] === 'COIN' ? 'USDC' : coin.split('::')[2];
-
-        //   const coinPrice = await this.getCoinPriceFromBinance(coinSymbol);
-        //   this._coinPriceMap.set(coin, coinPrice);
-        // }
       } catch (error) {
         console.error('Error caught while getCoinPriceMap() ', error);
       }
@@ -204,8 +233,9 @@ export class StatisticService {
         let execTime = (endTime - startTime) / 1000;
 
         marketStatistic = new Statistic();
-        const coinPriceMap = await this.getCoinPriceMap();
-        marketStatistic.prices = coinPriceMap;
+        const coinTypePriceMap = await this.getCoinPriceMap();
+        marketStatistic.prices = coinTypePriceMap;
+        // console.log('[Stat-Prices]', marketStatistic.prices);
 
         // get total borrow amount and value of each coin type
         const totalDebts = [];
@@ -213,7 +243,7 @@ export class StatisticService {
         const borrowCoins =
           await this._obligationService.findDistinctBorrowCoins();
         for (const coin of borrowCoins) {
-          const coinPrice = coinPriceMap.get(coin.coinType);
+          const coinPrice = coinTypePriceMap.get(coin.coinType);
           const multiple = this.getDecimalMultiplier(coin.coinType);
           const coinTotalBorrowValue =
             await this._obligationService.getTotalBorrowValueByCoinType(
@@ -239,7 +269,7 @@ export class StatisticService {
         const collateralCoins =
           await this._obligationService.findDistinctCollateralsCoins();
         for (const coin of collateralCoins) {
-          const coinPrice = coinPriceMap.get(coin.coinType);
+          const coinPrice = coinTypePriceMap.get(coin.coinType);
           const multiple = this.getDecimalMultiplier(coin.coinType);
           const coinTotalCollateralValue =
             await this._obligationService.getTotalCollateralValueByCoinType(
@@ -264,7 +294,7 @@ export class StatisticService {
         let totalSupplyValue = 0;
         const supplyCoins = await this._supplyService.findDistinctCoins();
         for (const coin of supplyCoins) {
-          const coinPrice = coinPriceMap.get(coin.coinType);
+          const coinPrice = coinTypePriceMap.get(coin.coinType);
           const multiple = this.getDecimalMultiplier(coin.coinType);
           const coinTotalSupplyValue =
             await this._supplyService.getTotalSupplyValueByCoinType(
@@ -300,7 +330,10 @@ export class StatisticService {
 
         marketStatistic.leaderboards = leaderboards;
         await this.create(marketStatistic);
-        await this.updateLatestLeaderboardToAPI(marketStatistic);
+
+        if (this.LEADERBOARD_WRITE_TO_API !== 0) {
+          await this.updateLatestLeaderboardToAPI(marketStatistic);
+        }
 
         // console.log('[MarketStatistic]:', marketStatistic);
         endTime = new Date().getTime();
@@ -430,7 +463,10 @@ export class StatisticService {
         };
 
         if (rank <= limit) {
-          // boardItem.name = await this._suiService.getSuiName(sender);
+          if (this.LEADERBOARD_SUINS !== 0) {
+            boardItem.name = await this._suiService.getSuiName(sender);
+          }
+
           borrowLeadboard.push(boardItem);
         } else {
           break;
@@ -550,15 +586,19 @@ export class StatisticService {
       let rank = 0;
       for (const [sender, senderTvlValue] of topTvlerMap) {
         rank += 1;
+        const suiNS = sender;
         const boardItem = {
           rank: rank,
           address: sender,
-          name: sender,
+          name: suiNS,
           amount: senderTvlValue,
         };
 
         if (rank <= limit) {
-          // boardItem.name = await this._suiService.getSuiName(sender);
+          if (this.LEADERBOARD_SUINS !== 0) {
+            boardItem.name = await this._suiService.getSuiName(sender);
+          }
+
           tvlLeadboard.push(boardItem);
         } else {
           break;
