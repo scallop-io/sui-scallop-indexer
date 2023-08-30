@@ -18,6 +18,10 @@ import { RedeemService } from './redeem/redeem.service';
 
 @Injectable()
 export class AppService {
+  private INCLUDE_FLASHLOAN = Number(process.env.INCLUDE_FLASHLOAN) || 1;
+  private INCLUDE_LENDING = Number(process.env.INCLUDE_LENDING) || 0;
+  private INCLUDE_STATISTICS = Number(process.env.INCLUDE_STATISTICS) || 0;
+
   @Inject(SuiService)
   private readonly _suiService: SuiService;
 
@@ -233,7 +237,9 @@ export class AppService {
         const obligation = await this._obligationService.findByObligation(
           obligationId,
         );
-        changedObligationDBMap.set(obligation.obligation_id, obligation);
+        if (obligation) {
+          changedObligationDBMap.set(obligation.obligation_id, obligation);
+        }
       }
 
       let obligationCollateralsMap = new Map<string, any>();
@@ -241,34 +247,35 @@ export class AppService {
       let obligationDebtsMap = new Map<string, any>();
       let debtsParentIdMap = new Map<string, any>();
       // get Collaterals
-      startTime = new Date().getTime();
       if (hasCollateralsChanged) {
+        startTime = new Date().getTime();
         [obligationCollateralsMap, collateralsParentIdMap] =
           await this._obligationService.getCollateralsInObligationMap(
             this._suiService,
             collateralChangedObligations,
           );
+
+        endTime = new Date().getTime();
+        execTime = (endTime - startTime) / 1000;
+        console.log(
+          `[Collaterals]: getCollateralsInObligationMap, chg<${collateralChangedObligations.size}>, col<${obligationCollateralsMap.size}>, parent<${collateralsParentIdMap.size}> <${execTime}> secs.`,
+        );
       }
-      endTime = new Date().getTime();
-      execTime = (endTime - startTime) / 1000;
-      console.log(
-        `[Collaterals]: getCollateralsInObligationMap, chg<${collateralChangedObligations.size}>, col<${obligationCollateralsMap.size}>, parent<${collateralsParentIdMap.size}> <${execTime}> secs.`,
-      );
 
       // get Debts
-      startTime = new Date().getTime();
       if (hasDebtsChanged) {
+        startTime = new Date().getTime();
         [obligationDebtsMap, debtsParentIdMap] =
           await this._obligationService.getDebtsInObligationMap(
             this._suiService,
             debtChangedObligations,
           );
+        endTime = new Date().getTime();
+        execTime = (endTime - startTime) / 1000;
+        console.log(
+          `[Debts]: getDebtsInObligationMap, chg<${debtChangedObligations.size}>, col<${obligationDebtsMap.size}>, parent<${debtsParentIdMap.size}> <${execTime}> secs.`,
+        );
       }
-      endTime = new Date().getTime();
-      execTime = (endTime - startTime) / 1000;
-      console.log(
-        `[Debts]: getDebtsInObligationMap, chg<${debtChangedObligations?.size || 0}>, col<${obligationDebtsMap?.size || 0}>, parent<${debtsParentIdMap?.size || 0}> <${execTime}> secs.`,
-      );
 
       const transactionSession = await this.connection.startSession();
       transactionSession.startTransaction();
@@ -606,15 +613,21 @@ export class AppService {
         marketId,
       );
 
-      // Get & update flashloan events
-      await this.updateFlashloanRelatedEvents();
+      if (this.INCLUDE_FLASHLOAN !== 0) {
+        // Get & update flashloan events
+        await this.updateFlashloanRelatedEvents();
+      }
 
-      // Get & update lending events
-      // const uniqueSenders = await this.updateLendingRelatedEvents();
-      // await this.updateSupplies(uniqueSenders);
+      if (this.INCLUDE_LENDING !== 0) {
+        // Get & update lending events
+        const uniqueSenders = await this.updateLendingRelatedEvents();
+        await this.updateSupplies(uniqueSenders);
+      }
 
-      // Get & update statistic & leaderboard (default 10 mins)
-      // await this._statisticService.updateMarketStatistic();
+      if (this.INCLUDE_STATISTICS !== 0) {
+        // Get & update statistic & leaderboard (default 10 mins)
+        await this._statisticService.updateMarketStatistic();
+      }
 
       const end = new Date().getTime();
       const execTime = (end - start) / 1000;

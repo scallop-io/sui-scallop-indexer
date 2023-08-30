@@ -86,7 +86,7 @@ export class SuiService {
     return this._marketId;
   }
 
-  private async getProtocolId() {
+  private async getProtocolIdFromAPI() {
     if (!this._protocolId) {
       if (this.PROTOCOL_ID) {
         this._protocolId = this.PROTOCOL_ID;
@@ -96,6 +96,19 @@ export class SuiService {
           this._protocolId =
             address[this.NETWORK]['core']['packages']['protocol']['id'];
         }
+      }
+      console.log(`[Protocol-Id]: ${this._protocolId}`);
+    }
+    return this._protocolId;
+  }
+
+  private async getProtocolId() {
+    if (!this._protocolId) {
+      if (this.PROTOCOL_ID) {
+        this._protocolId = this.PROTOCOL_ID;
+      } else {
+        // set default protocol id to INIT_PROTOCOL_ID
+        this._protocolId = this.INIT_PROTOCOL_ID;
       }
       console.log(`[Protocol-Id]: ${this._protocolId}`);
     }
