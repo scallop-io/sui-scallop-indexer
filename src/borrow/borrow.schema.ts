@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { now, Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 import { Obligation } from 'src/obligation/obligation.schema';
 
 export type BorrowDocument = Borrow & Document;
