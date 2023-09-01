@@ -41,5 +41,5 @@ jobs:
             docker rm scallop-sui-indexer-mainnet
             docker rmi nathan7scallop/scallop-sui-indexer:latest
             docker pull nathan7scallop/scallop-sui-indexer:latest
-            docker run -d --restart unless-stopped --name scallop-sui-indexer-testnet --env-file /usr/local/src/envs/.prod-testnet.env nathan7scallop/scallop-sui-indexer:latest
-            docker run -d --restart unless-stopped --name scallop-sui-indexer-mainnet --env-file /usr/local/src/envs/.prod-mainnet.env nathan7scallop/scallop-sui-indexer:latest
+            docker run -d --restart unless-stopped --log-opt max-size=500m --log-opt max-file=3 --name scallop-sui-indexer-testnet --env-file /usr/local/src/envs/.prod-testnet.env nathan7scallop/scallop-sui-indexer:latest
+            docker run -d --restart unless-stopped --log-opt max-size=500m --log-opt max-file=3 --name scallop-sui-indexer-mainnet --env-file /usr/local/src/envs/.prod-mainnet.env nathan7scallop/scallop-sui-indexer:latest
