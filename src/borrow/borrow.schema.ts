@@ -31,11 +31,11 @@ export class Borrow {
   @Prop({ type: Types.ObjectId, ref: 'Obligation' })
   obligation?: Obligation;
 
-  @Prop({ default: now().toString() })
-  createdAt?: string;
+  // @Prop({ default: now().toString() })
+  // createdAt?: string;
 
-  @Prop({ default: now().toString() })
-  updatedAt?: string;
+  // @Prop({ default: now().toString() })
+  // updatedAt?: string;
 }
 
 export const BorrowSchema = SchemaFactory.createForClass(Borrow);

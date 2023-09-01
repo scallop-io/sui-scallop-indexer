@@ -329,6 +329,7 @@ export class StatisticService {
         leaderboards.set('tvl', tvlLeadboard);
 
         marketStatistic.leaderboards = leaderboards;
+        marketStatistic.timestamp = new Date();
         await this.create(marketStatistic);
 
         if (this.LEADERBOARD_WRITE_TO_API !== 0) {

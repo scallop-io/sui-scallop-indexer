@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { now, Document } from 'mongoose';
+import { Document } from 'mongoose';
 
 export type SupplyDocument = Supply & Document;
 
@@ -30,11 +30,11 @@ export class Supply {
   @Prop({ default: [] })
   assets?: Asset[];
 
-  @Prop({ default: now().toString() })
-  createdAt?: string;
+  // @Prop({ default: now().toString() })
+  // createdAt?: string;
 
-  @Prop({ default: now().toString() })
-  updatedAt?: string;
+  // @Prop({ default: now().toString() })
+  // updatedAt?: string;
 }
 
 export const SupplySchema = SchemaFactory.createForClass(Supply);

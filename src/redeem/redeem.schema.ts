@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { now, Document } from 'mongoose';
+import { Document } from 'mongoose';
 
 export type RedeemDocument = Redeem & Document;
 
@@ -39,11 +39,11 @@ export class Redeem {
   @Prop()
   timestampMs?: string;
 
-  @Prop({ default: now().toString() })
-  createdAt?: string;
+  // @Prop({ default: now().toString() })
+  // createdAt?: string;
 
-  @Prop({ default: now().toString() })
-  updatedAt?: string;
+  // @Prop({ default: now().toString() })
+  // updatedAt?: string;
 }
 
 export const RedeemSchema = SchemaFactory.createForClass(Redeem);

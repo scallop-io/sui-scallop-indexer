@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { now, Document } from 'mongoose';
+import { Document } from 'mongoose';
 
 export type ObligationDocument = Obligation & Document;
 
@@ -63,11 +63,11 @@ export class Obligation {
   @Prop()
   debts_parent_id?: string;
 
-  @Prop({ default: now().toString() })
-  createdAt?: string;
+  // @Prop({ default: now().toString() })
+  // createdAt?: string;
 
-  @Prop({ default: now().toString() })
-  updatedAt?: string;
+  // @Prop({ default: now().toString() })
+  // updatedAt?: string;
 }
 
 export const ObligationSchema = SchemaFactory.createForClass(Obligation);

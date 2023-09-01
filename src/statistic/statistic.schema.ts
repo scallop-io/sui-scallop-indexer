@@ -57,11 +57,11 @@ export class Statistic {
   @Prop({ default: [] })
   leaderboards?: Map<string, any[]>;
 
-  @Prop({ default: now().toString() })
-  createdAt?: string;
+  // @Prop({ default: now().toString() })
+  // createdAt?: string;
 
-  @Prop({ default: now().toString() })
-  updatedAt?: string;
+  // @Prop({ default: now().toString() })
+  // updatedAt?: string;
 }
 
 export const StatisticSchema = SchemaFactory.createForClass(Statistic);

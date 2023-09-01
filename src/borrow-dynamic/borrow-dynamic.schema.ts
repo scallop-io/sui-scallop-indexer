@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { now, Document } from 'mongoose';
+import { Document } from 'mongoose';
 
 export type BorrowDynamicDocument = BorrowDynamic & Document;
 
@@ -30,11 +30,11 @@ export class BorrowDynamic {
   @Prop({ default: '' })
   lastUpdated: string;
 
-  @Prop({ default: now().toString() })
-  createdAt?: string;
+  // @Prop({ default: now().toString() })
+  // createdAt?: string;
 
-  @Prop({ default: now().toString() })
-  updatedAt?: string;
+  // @Prop({ default: now().toString() })
+  // updatedAt?: string;
 }
 
 export const BorrowDynamicSchema = SchemaFactory.createForClass(BorrowDynamic);
