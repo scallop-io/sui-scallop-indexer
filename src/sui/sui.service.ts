@@ -343,6 +343,7 @@ export class SuiService {
       }
     } catch (e) {
       console.error('Error caught while getBorrowDynamics():', e);
+      throw e;
     }
     return borrowDynamics;
   }
@@ -479,31 +480,28 @@ export class SuiService {
     return eventObjects;
   }
 
-  async getObligationVersion(obligation_id: string): Promise<string> {
-    const obj = await SuiService.getSuiKit()
-      .provider()
-      .getObject({
-        id: obligation_id,
-        options: {
-          showContent: true,
-          showBcs: true,
-          showOwner: true,
-        },
-      });
-    await this.checkRPCLimit();
-    // console.log(obj.data.owner);
-    const version = obj.data.owner['Shared']['initial_shared_version'];
+  // async getObligationVersion(obligation_id: string): Promise<string> {
+  //   const obj = await SuiService.getSuiKit()
+  //     .provider()
+  //     .getObject({
+  //       id: obligation_id,
+  //       options: {
+  //         showContent: true,
+  //         showBcs: true,
+  //         showOwner: true,
+  //       },
+  //     });
+  //   await this.checkRPCLimit();
+  //   // console.log(obj.data.owner);
+  //   const version = obj.data.owner['Shared']['initial_shared_version'];
 
-    return version;
-  }
+  //   return version;
+  // }
 
-  // get multiple obligation versions
-  async getObligationVersions(
-    obligationIds: string[],
-  ): Promise<Map<string, string>> {
-    const obligationVersions = new Map<string, string>();
+  // Set multiple obligation version and parent ids
+  async setObligationVersionAndParentIds(obligationsMap: Map<string, any>) {
     try {
-      const keys = [...obligationIds];
+      const keys = [...obligationsMap.keys()];
       while (keys.length) {
         // Get the first batch(50 keys), and update 'keys' to contain the remaining keys
         const currentBatchOfKeys = keys.splice(
@@ -516,50 +514,67 @@ export class SuiService {
         );
         await this.checkRPCLimit();
         for (const obj of obligationObjs) {
-          obligationVersions.set(obj.objectId, obj.objectVersion.toString());
+          if (obligationsMap.has(obj.objectId)) {
+            // set obligation version
+            obligationsMap.get(obj.objectId).version =
+              obj.objectVersion.toString();
+            // set collaterals parent id
+            obligationsMap.get(obj.objectId).collaterals_parent_id =
+              obj.objectFields['collaterals'].fields.table.fields.id.id;
+            // set debts parent id
+            obligationsMap.get(obj.objectId).debts_parent_id =
+              obj.objectFields['debts'].fields.table.fields.id.id;
+          }
         }
       } //end while
     } catch (e) {
-      console.error('Error caught while getObligationVersions():', e);
+      console.error(
+        'Error caught while setObligationVersionAndParentIds():',
+        e,
+      );
+      throw e;
     }
-
-    return obligationVersions;
   }
 
   async getSuiName(address: string): Promise<string> {
     let suiName = address;
-    // get default suiNS
-    const suiNameObj = await SuiService.getSuiKit()
-      .provider()
-      .resolveNameServiceNames({
-        address: address,
-      });
-
-    if (suiNameObj.data.length > 0) {
-      suiName = suiNameObj.data[0];
-    } else {
-      let packageId =
-        '0xd22b24490e0bae52676651b4f56660a5ff8022a2576e0089f79b3c88d44e08f0';
-      if (process.env.NETWORK === 'testnet') {
-        packageId =
-          '0x701b8ca1c40f11288a1ed2de0a9a2713e972524fbab748a7e6c137225361653f';
-      }
-      const suinsRegistration = await SuiService.getSuiKit()
+    try {
+      // get default suiNS
+      const suiNameObj = await SuiService.getSuiKit()
         .provider()
-        .getOwnedObjects({
-          owner: address,
-          filter: {
-            StructType: packageId + '::suins_registration::SuinsRegistration',
-          },
-          options: {
-            showContent: true,
-            showDisplay: true,
-          },
+        .resolveNameServiceNames({
+          address: address,
         });
-      if (suinsRegistration.data.length > 0) {
-        // set 1st suiNS as default
-        suiName = suinsRegistration.data[0].data.display.data['name'];
+
+      if (suiNameObj.data.length > 0) {
+        suiName = suiNameObj.data[0];
+      } else {
+        let packageId =
+          '0xd22b24490e0bae52676651b4f56660a5ff8022a2576e0089f79b3c88d44e08f0';
+        if (process.env.NETWORK === 'testnet') {
+          packageId =
+            '0x701b8ca1c40f11288a1ed2de0a9a2713e972524fbab748a7e6c137225361653f';
+        }
+        const suinsRegistration = await SuiService.getSuiKit()
+          .provider()
+          .getOwnedObjects({
+            owner: address,
+            filter: {
+              StructType: packageId + '::suins_registration::SuinsRegistration',
+            },
+            options: {
+              showContent: true,
+              showDisplay: true,
+            },
+          });
+        if (suinsRegistration.data.length > 0) {
+          // set 1st suiNS as default
+          suiName = suinsRegistration.data[0].data.display.data['name'];
+        }
       }
+    } catch (e) {
+      console.error('Error caught while getSuiName():', e);
+      // throw e;
     }
 
     return suiName;

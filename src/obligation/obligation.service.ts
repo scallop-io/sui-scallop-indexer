@@ -49,74 +49,49 @@ export class ObligationService {
     return eventObjects;
   }
 
-  // get collateral and debt from obligation
+  // get collaterals from obligation
   async getCollateralsInObligationMap(
     suiService: SuiService,
     changedObligations: Set<string>,
-  ): Promise<[Map<string, any>, Map<string, any>]> {
+  ): Promise<Map<string, any>> {
     const obligationCollateralsMap = new Map<string, any>();
-    const collateralsParentIdMap = new Map<string, any>();
+    let obligationId;
     try {
-      const keys = [...changedObligations.keys()];
-      while (keys.length) {
-        // Get the first batch(50 keys), and update 'keys' to contain the remaining keys
-        const currentBatchOfKeys = keys.splice(
-          0,
-          Math.min(suiService.SUI_QUERY_LIMIT, keys.length),
-        );
-
-        const obligationObjs = await SuiService.getSuiKit().getObjects(
-          currentBatchOfKeys,
-        );
-        await suiService.checkRPCLimit();
-        for (const obligationObj of obligationObjs) {
-          const parentId =
-            obligationObj.objectFields['collaterals'].fields.table.fields.id.id;
-          const collaterals = await suiService.getCollaterals(parentId);
-
-          obligationCollateralsMap.set(obligationObj.objectId, collaterals);
-          collateralsParentIdMap.set(obligationObj.objectId, parentId);
-        }
-      } //end while
+      for (obligationId of changedObligations) {
+        const obligationDB = await this.findByObligation(obligationId);
+        const parentId = obligationDB.collaterals_parent_id;
+        const collaterals = await suiService.getCollaterals(parentId);
+        obligationCollateralsMap.set(obligationId, collaterals);
+      }
     } catch (e) {
-      console.error('Error caught while getCollateralsInObligationMap():', e);
+      console.error(
+        `Error caught while getCollateralsInObligationMap(): id<${obligationId}>, ${e}`,
+      );
       throw e;
     }
-    return [obligationCollateralsMap, collateralsParentIdMap];
+    return obligationCollateralsMap;
   }
 
   async getDebtsInObligationMap(
     suiService: SuiService,
     changedObligations: Set<string>,
-  ): Promise<[Map<string, any>, Map<string, any>]> {
+  ): Promise<Map<string, any>> {
     const obligationDebtsMap = new Map<string, any>();
-    const debtsParentIdMap = new Map<string, any>();
+    let obligationId;
     try {
-      const keys = [...changedObligations.keys()];
-      while (keys.length) {
-        // Get the first batch(50 keys), and update 'keys' to contain the remaining keys
-        const currentBatchOfKeys = keys.splice(
-          0,
-          Math.min(suiService.SUI_QUERY_LIMIT, keys.length),
-        );
-        const obligationObjs = await SuiService.getSuiKit().getObjects(
-          currentBatchOfKeys,
-        );
-        await suiService.checkRPCLimit();
-        for (const obligationObj of obligationObjs) {
-          const parentId =
-            obligationObj.objectFields['debts'].fields.table.fields.id.id;
-          const debts = await suiService.getDebts(parentId);
-
-          obligationDebtsMap.set(obligationObj.objectId, debts);
-          debtsParentIdMap.set(obligationObj.objectId, parentId);
-        } //end while
+      for (obligationId of changedObligations) {
+        const obligationDB = await this.findByObligation(obligationId);
+        const parentId = obligationDB.debts_parent_id;
+        const debts = await suiService.getDebts(parentId);
+        obligationDebtsMap.set(obligationId, debts);
       }
     } catch (e) {
-      console.error('Error caught while getDebtsInObligationMap():', e);
+      console.error(
+        `Error caught while getDebtsInObligationMap(): id<${obligationId}>, ${e}`,
+      );
       throw e;
     }
-    return [obligationDebtsMap, debtsParentIdMap];
+    return obligationDebtsMap;
   }
 
   // get created obligations
