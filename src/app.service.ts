@@ -231,17 +231,6 @@ export class AppService {
         changedObligations.add(liquidate.obligation_id);
       }
 
-      // load obligations from DB
-      const changedObligationDBMap = new Map();
-      for (const obligationId of changedObligations) {
-        const obligation = await this._obligationService.findByObligation(
-          obligationId,
-        );
-        if (obligation) {
-          changedObligationDBMap.set(obligation.obligation_id, obligation);
-        }
-      }
-
       let obligationCollateralsMap = new Map<string, any>();
       let collateralsParentIdMap = new Map<string, any>();
       let obligationDebtsMap = new Map<string, any>();
@@ -279,6 +268,17 @@ export class AppService {
 
       const transactionSession = await this.connection.startSession();
       transactionSession.startTransaction();
+      // load obligations from DB
+      const changedObligationDBMap = new Map();
+      for (const obligationId of changedObligations) {
+        const obligation = await this._obligationService.findByObligation(
+          obligationId,
+          transactionSession,
+        );
+        if (obligation) {
+          changedObligationDBMap.set(obligation.obligation_id, obligation);
+        }
+      }
       try {
         // update deposits
         let startTime = new Date().getTime();

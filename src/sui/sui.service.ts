@@ -260,6 +260,7 @@ export class SuiService {
       }
     } catch (e) {
       console.error('Error caught while getCollaterals():', e);
+      throw e;
     }
     return collaterals;
   }
@@ -299,6 +300,7 @@ export class SuiService {
       }
     } catch (e) {
       console.error('Error caught while getDebts():', e);
+      throw e;
     }
     return debts;
   }
