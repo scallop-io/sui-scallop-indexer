@@ -21,6 +21,8 @@ export class AppService {
   private INCLUDE_FLASHLOAN = Number(process.env.INCLUDE_FLASHLOAN) || 1;
   private INCLUDE_LENDING = Number(process.env.INCLUDE_LENDING) || 0;
   private INCLUDE_STATISTICS = Number(process.env.INCLUDE_STATISTICS) || 0;
+  private OBLIGATION_PAGE_LIMIT =
+    Number(process.env.OBLIGATION_PAGE_LIMIT) || 10;
 
   @Inject(SuiService)
   private readonly _suiService: SuiService;
@@ -65,8 +67,10 @@ export class AppService {
     @InjectConnection() private readonly connection: mongoose.Connection,
   ) {}
 
-  // default fetch all obligations first to avoid re-query other events
-  async updateObligationCreatedEvents(pageLimit = 9999): Promise<void> {
+  // default fetch obligations first to avoid re-query other events
+  async updateObligationCreatedEvents(
+    pageLimit = this.OBLIGATION_PAGE_LIMIT,
+  ): Promise<void> {
     const changedEventStateMap = new Map();
 
     let pageCount = 0;
