@@ -456,9 +456,9 @@ export class SuiService {
         );
       }
     } catch (err) {
+      await delay(this.RPC_DELAY_SECONDS * 1000);
       console.error(
-        `Error caught while getEventsFromQuery() for ${eventName}: `,
-        err,
+        `Delay ${this.RPC_DELAY_SECONDS} sec when error caught at getEventsFromQueryByPages() for ${eventName}: ${err}`,
       );
     }
     return [eventObjects, hasNextPage];
