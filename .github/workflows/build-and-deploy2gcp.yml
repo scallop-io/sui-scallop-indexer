@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - feat/deploy
 
 jobs:
   build:
