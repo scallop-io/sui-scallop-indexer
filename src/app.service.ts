@@ -591,7 +591,7 @@ export class AppService {
     }
   }
 
-  async loopQueryEvents(): Promise<void> {
+  async start(): Promise<void> {
     while (true) {
       const start = new Date().getTime();
       // SuiService.resetQueryCount();
