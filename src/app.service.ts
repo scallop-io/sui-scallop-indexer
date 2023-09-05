@@ -366,6 +366,8 @@ export class AppService {
           );
           dbObligation.collaterals = obligation.collaterals;
           dbObligation.debts = obligation.debts;
+          dbObligation.collaterals_count = obligation.collaterals.length;
+          dbObligation.debts_count = obligation.debts.length;
 
           // const savedObligation =
           await this._obligationService.findOneAndUpdateObligation(

@@ -63,6 +63,12 @@ export class Obligation {
   @Prop()
   debts_parent_id?: string;
 
+  @Prop({ default: 0, index: true })
+  collaterals_count?: number;
+
+  @Prop({ default: 0, index: true })
+  debts_count?: number;
+
   // @Prop({ default: now().toString() })
   // createdAt?: string;
 
