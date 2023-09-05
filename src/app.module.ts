@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { config } from './app.config';
 import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ObligationModule } from './obligation/obligation.module';
@@ -9,8 +11,6 @@ import { BorrowModule } from './borrow/borrow.module';
 import { RepayModule } from './repay/repay.module';
 import { LiquidateModule } from './liquidate/liquidate.module';
 import { BorrowDynamicModule } from './borrow-dynamic/borrow-dynamic.module';
-import * as process from 'process';
-import * as dotenv from 'dotenv';
 import { EventStateModule } from './eventstate/eventstate.module';
 import { FlashloanModule } from './flashloan/flashloan.module';
 import { StatisticModule } from './statistic/statistic.module';
@@ -18,17 +18,16 @@ import { MintModule } from './mint/mint.module';
 import { RedeemModule } from './redeem/redeem.module';
 import { SupplyModule } from './supply/supply.module';
 
-dotenv.config();
-
 @Module({
   imports: [
-    MongooseModule.forRoot(
-      process.env.MONGO_URI || 'mongodb://localhost:27017/Scallop',
-      {
-        // if the replica is only 1, set directConnection to `true`
-        directConnection: false,
-      },
-    ),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [config],
+    }),
+    MongooseModule.forRoot(config().database.uri, {
+      // if the replica is only 1, set directConnection to `true`
+      directConnection: false,
+    }),
     SuiModule,
     EventStateModule,
     ObligationModule,

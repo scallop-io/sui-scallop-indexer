@@ -1,7 +1,9 @@
 import { PaginatedEvents } from '@mysten/sui.js';
 import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NetworkType, SuiKit } from '@scallop-io/sui-kit';
 import axios from 'axios';
+import { config, ConfigInterface } from 'src/app.config';
 import { BorrowDynamic } from 'src/borrow-dynamic/borrow-dynamic.schema';
 import { delay } from 'src/utils/common';
 import { EventState } from 'src/eventstate/eventstate.schema';
@@ -10,22 +12,13 @@ import { Collateral, Debt } from 'src/obligation/obligation.schema';
 
 @Injectable()
 export class SuiService {
+  private readonly configNetwork: ConfigInterface['network'];
+  private readonly configScallopApi: ConfigInterface['scallopApi'];
+  private readonly configProgram: ConfigInterface['program'];
+  private readonly configSui: ConfigInterface['sui'];
+
   private static _suiKit: SuiKit;
   private static _queryCount = 0;
-  public SUI_QUERY_LIMIT = Number(process.env.QUERY_LIMIT) || 50;
-  public RPC_QPS_LIMIT = Number(process.env.RPC_QPS) || 100;
-  public RPC_DELAY_SECONDS = Number(process.env.RPC_DELAY_SECONDS) || 1;
-  public SUI_PAGE_LIMIT = Number(process.env.PAGE_LIMIT) || 1;
-
-  private API_URL = process.env.API_URL || 'https://sui.api.scallop.io/';
-  private API_KEY = process.env.API_KEY || 'scalloptestapikey';
-  private ADDRESSES_ID = process.env.ADDRESSES_ID || '6462a088a7ace142bb6d7e9b';
-  private NETWORK = process.env.NETWORK || 'testnet';
-
-  private MARKET_ID = process.env.MARKET_ID;
-  private PROTOCOL_ID = process.env.PROTOCOL_ID;
-  private INIT_PROTOCOL_ID =
-    '0xefe8b36d5b2e43728cc323298626b83177803521d195cfb11e15b910e892fddf';
 
   private _addresses = undefined;
   private _protocolId = undefined;
@@ -44,14 +37,25 @@ export class SuiService {
   private _mintEventId = undefined;
   private _redeemEventId = undefined;
 
+  constructor(private configService: ConfigService<ConfigInterface>) {
+    this.configNetwork = this.configService.get('network', { infer: true });
+    this.configScallopApi = this.configService.get('scallopApi', {
+      infer: true,
+    });
+    this.configProgram = this.configService.get('program', { infer: true });
+    this.configSui = this.configService.get('sui', { infer: true });
+  }
+
   private async fetchAddressesFromAPI() {
     let addresses = undefined;
     try {
       const response = await axios.get(
-        this.API_URL + 'addresses/' + this.ADDRESSES_ID,
+        this.configScallopApi.url +
+          'addresses/' +
+          this.configScallopApi.addressesId,
         {
           headers: {
-            'api-key': this.API_KEY,
+            'api-key': this.configScallopApi.key,
           },
         },
       );
@@ -73,12 +77,13 @@ export class SuiService {
 
   public async getMarketId() {
     if (!this._marketId) {
-      if (this.MARKET_ID) {
-        this._marketId = this.MARKET_ID;
+      if (this.configProgram.marketId) {
+        this._marketId = this.configProgram.marketId;
       } else {
         const address = await this.getAddresses();
         if (this._addresses) {
-          this._marketId = address[this.NETWORK]['core']['market'];
+          this._marketId =
+            address[this.configNetwork.cluster]['core']['market'];
         }
       }
       console.log(`[Market-Id]: ${this._marketId}`);
@@ -88,13 +93,15 @@ export class SuiService {
 
   private async getProtocolIdFromAPI() {
     if (!this._protocolId) {
-      if (this.PROTOCOL_ID) {
-        this._protocolId = this.PROTOCOL_ID;
+      if (this.configProgram.protocolId) {
+        this._protocolId = this.configProgram.protocolId;
       } else {
         const address = await this.getAddresses();
         if (this._addresses) {
           this._protocolId =
-            address[this.NETWORK]['core']['packages']['protocol']['id'];
+            address[this.configNetwork.cluster]['core']['packages']['protocol'][
+              'id'
+            ];
         }
       }
       console.log(`[Protocol-Id]: ${this._protocolId}`);
@@ -104,11 +111,11 @@ export class SuiService {
 
   private async getProtocolId() {
     if (!this._protocolId) {
-      if (this.PROTOCOL_ID) {
-        this._protocolId = this.PROTOCOL_ID;
+      if (this.configProgram.protocolId) {
+        this._protocolId = this.configProgram.protocolId;
       } else {
         // set default protocol id to INIT_PROTOCOL_ID
-        this._protocolId = this.INIT_PROTOCOL_ID;
+        this._protocolId = this.configProgram.protocolObjectId;
       }
       console.log(`[Protocol-Id]: ${this._protocolId}`);
     }
@@ -204,10 +211,10 @@ export class SuiService {
 
   async checkRPCLimit() {
     SuiService._queryCount++;
-    if (SuiService._queryCount >= this.RPC_QPS_LIMIT) {
+    if (SuiService._queryCount >= this.configNetwork.qps) {
       // Delay 1 sec to avoid query limit
-      console.debug(`Delay ${this.RPC_DELAY_SECONDS} sec to avoid query limit`);
-      await delay(this.RPC_DELAY_SECONDS * 1000);
+      console.debug(`Delay ${this.configNetwork.ds} sec to avoid query limit`);
+      await delay(this.configNetwork.ds * 1000);
       SuiService._queryCount = 0;
     }
   }
@@ -215,8 +222,8 @@ export class SuiService {
   public static getSuiKit() {
     try {
       if (!this._suiKit) {
-        const network = <NetworkType>process.env.NETWORK;
-        const fullNodeUrl = process.env.RPC_ENDPOINT ?? undefined;
+        const network = <NetworkType>config().network.cluster;
+        const fullNodeUrl = config().network.enpoint;
         this._suiKit = new SuiKit({
           networkType: network,
           fullnodeUrl: fullNodeUrl,
@@ -352,7 +359,7 @@ export class SuiService {
     eventType: string,
     eventStateMap: Map<string, EventState>,
     createCallback: (item: any) => Promise<any>,
-    pageLimit = this.SUI_PAGE_LIMIT,
+    pageLimit = this.configSui.pageLimit,
   ): Promise<[any[], boolean]> {
     let hasNextPage = true;
     const eventObjects = [];
@@ -381,7 +388,7 @@ export class SuiService {
               query: {
                 MoveEventType: eventType,
               },
-              limit: this.SUI_QUERY_LIMIT,
+              limit: this.configSui.queryLimit,
               order: 'ascending',
             });
           console.debug(`[${eventName}]: query from <start>.`);
@@ -395,7 +402,7 @@ export class SuiService {
                 txDigest: cursorTxDigest,
                 eventSeq: cursorEventSeq,
               },
-              limit: this.SUI_QUERY_LIMIT,
+              limit: this.configSui.queryLimit,
               order: 'ascending',
             });
           console.debug(
@@ -456,9 +463,9 @@ export class SuiService {
         );
       }
     } catch (err) {
-      await delay(this.RPC_DELAY_SECONDS * 1000);
+      await delay(this.configNetwork.ds * 1000);
       console.error(
-        `Delay ${this.RPC_DELAY_SECONDS} sec when error caught at getEventsFromQueryByPages() for ${eventName}: ${err}`,
+        `Delay ${this.configNetwork.ds} sec when error caught at getEventsFromQueryByPages() for ${eventName}: ${err}`,
       );
     }
     return [eventObjects, hasNextPage];
@@ -468,7 +475,7 @@ export class SuiService {
     eventType: string,
     eventStateMap: Map<string, EventState>,
     createCallback: (item: any) => Promise<any>,
-    pageLimit = this.SUI_PAGE_LIMIT,
+    pageLimit = this.configSui.pageLimit,
   ): Promise<any[]> {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [eventObjects, hasNextPage] = await this.getEventsFromQueryByPages(
@@ -506,7 +513,7 @@ export class SuiService {
         // Get the first batch(50 keys), and update 'keys' to contain the remaining keys
         const currentBatchOfKeys = keys.splice(
           0,
-          Math.min(this.SUI_QUERY_LIMIT, keys.length),
+          Math.min(this.configSui.queryLimit, keys.length),
         );
 
         const obligationObjs = await SuiService.getSuiKit().getObjects(
@@ -551,7 +558,7 @@ export class SuiService {
       } else {
         let packageId =
           '0xd22b24490e0bae52676651b4f56660a5ff8022a2576e0089f79b3c88d44e08f0';
-        if (process.env.NETWORK === 'testnet') {
+        if (this.configNetwork.cluster === 'testnet') {
           packageId =
             '0x701b8ca1c40f11288a1ed2de0a9a2713e972524fbab748a7e6c137225361653f';
         }

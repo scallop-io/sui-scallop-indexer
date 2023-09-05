@@ -27,7 +27,6 @@ export class BorrowService {
   ): Promise<any[]> {
     const eventId = await suiService.getBorrowEventId();
     return await suiService.getEventsFromQuery(
-      // process.env.EVENT_BORROW,
       eventId,
       eventStateMap,
       async (item) => {

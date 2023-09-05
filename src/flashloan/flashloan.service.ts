@@ -27,7 +27,6 @@ export class FlashloanService {
   ): Promise<any[]> {
     const eventId = await suiService.getFlashloanBorrowEventId();
     return await suiService.getEventsFromQuery(
-      // process.env.EVENT_FLASHLOAN_BORROW,
       eventId,
       eventStateMap,
       async (item) => {
@@ -48,7 +47,6 @@ export class FlashloanService {
   ): Promise<any[]> {
     const eventId = await suiService.getFlashloanRepayEventId();
     return await suiService.getEventsFromQuery(
-      // process.env.EVENT_FLASHLOAN_REPAY,
       eventId,
       eventStateMap,
       async (item) => {

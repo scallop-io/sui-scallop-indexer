@@ -27,7 +27,6 @@ export class RepayService {
   ): Promise<any[]> {
     const eventId = await suiService.getRepayEventId();
     return await suiService.getEventsFromQuery(
-      // process.env.EVENT_REPAY,
       eventId,
       eventStateMap,
       async (item) => {

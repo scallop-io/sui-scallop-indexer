@@ -1,17 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import * as mongoose from 'mongoose';
-import { Model } from 'mongoose';
+import { ConfigService } from '@nestjs/config';
+import mongoose, { Model } from 'mongoose';
 import axios from 'axios';
-import { Statistic, StatisticDocument } from './statistic.schema';
+import { ConfigInterface } from 'src/app.config';
 import { SuiService } from 'src/sui/sui.service';
 import { ObligationService } from 'src/obligation/obligation.service';
 import { SupplyService } from 'src/supply/supply.service';
 import { MintService } from 'src/mint/mint.service';
 import { RedeemService } from 'src/redeem/redeem.service';
+import { Statistic, StatisticDocument } from './statistic.schema';
 
 @Injectable()
 export class StatisticService {
+  private readonly configScallopApi: ConfigInterface['scallopApi'];
+  private readonly configLeaderboardApi: ConfigInterface['leaderboardApi'];
+
   @Inject(SuiService)
   private readonly _suiService: SuiService;
 
@@ -28,21 +32,6 @@ export class StatisticService {
   private readonly _redeemService: RedeemService;
 
   private static _logTime = new Date().getTime();
-
-  private API_URL = process.env.API_URL || 'https://sui.api.scallop.io/';
-  private API_KEY = process.env.API_KEY || 'scalloptestapikey';
-  private LEADERBOARD_ZEALY_URL =
-    process.env.LEADERBOARD_ZEALY_URL ||
-    'https://api.zealy.io/communities/scallopio/leaderboard?limit=100&page=0';
-  private LEADERBOARD_API_KEY =
-    process.env.LEADERBOARD_API_KEY || 'e0f0d9MU4aYqPvu0JRTSFP0nYhs';
-  private LEADERBOARD_LIMIT = Number(process.env.LEADERBOARD_LIMIT) || 100;
-  private LEADERBOARD_SUINS = Number(process.env.LEADERBOARD_SUINS) || 0;
-  private LEADERBOARD_WRITE_TO_API =
-    Number(process.env.LEADERBOARD_WRITE_TO_API) || 0;
-
-  private STATISTIC_INTERVAL_SECONDS =
-    Number(process.env.STATISTIC_INTERVAL_SECONDS) || 600; // default 10 mins
 
   private _coinPriceMap = new Map<string, number>();
 
@@ -128,9 +117,17 @@ export class StatisticService {
   }
 
   constructor(
+    private configService: ConfigService<ConfigInterface>,
     @InjectModel(Statistic.name)
     private statisticModel: Model<StatisticDocument>,
-  ) {}
+  ) {
+    this.configScallopApi = this.configService.get('scallopApi', {
+      infer: true,
+    });
+    this.configLeaderboardApi = this.configService.get('leaderboardApi', {
+      infer: true,
+    });
+  }
 
   async create(
     statistic: Statistic,
@@ -221,13 +218,13 @@ export class StatisticService {
   }
 
   async updateMarketStatistic(
-    limit = this.LEADERBOARD_LIMIT,
+    limit = this.configLeaderboardApi.queryLimit,
   ): Promise<Statistic> {
     let marketStatistic = undefined;
     try {
       const currentTime = new Date().getTime();
       const passTime = (currentTime - StatisticService._logTime) / 1000;
-      if (passTime > this.STATISTIC_INTERVAL_SECONDS) {
+      if (passTime > this.configLeaderboardApi.loopIntervalSeconds) {
         const startTime = new Date().getTime();
         let endTime = new Date().getTime();
         let execTime = (endTime - startTime) / 1000;
@@ -332,7 +329,7 @@ export class StatisticService {
         marketStatistic.timestamp = new Date();
         await this.create(marketStatistic);
 
-        if (this.LEADERBOARD_WRITE_TO_API !== 0) {
+        if (this.configLeaderboardApi.writeToApi) {
           await this.updateLatestLeaderboardToAPI(marketStatistic);
         }
 
@@ -356,7 +353,7 @@ export class StatisticService {
   async updateLatestLeaderboardToAPI(latestStatistic: Statistic): Promise<any> {
     let latestLeaderboard;
     try {
-      const LEADERBOARD_API_URL = this.API_URL + 'leaderboards';
+      const LEADERBOARD_API_URL = this.configScallopApi.url + 'leaderboards';
       const startTime = new Date().getTime();
       const zealyLeaderboard = latestStatistic.leaderboards.get('zealy');
       const tvlLeadboard = latestStatistic.leaderboards.get('tvl');
@@ -372,7 +369,7 @@ export class StatisticService {
 
       await axios.post(LEADERBOARD_API_URL, latestLeaderboard, {
         headers: {
-          'api-key': this.API_KEY,
+          'api-key': this.configScallopApi.key,
         },
       });
 
@@ -391,8 +388,8 @@ export class StatisticService {
     const zealyLeaderboard = [];
     try {
       const startTime = new Date().getTime();
-      const response = await axios.get(this.LEADERBOARD_ZEALY_URL, {
-        headers: { 'x-api-key': this.LEADERBOARD_API_KEY },
+      const response = await axios.get(this.configLeaderboardApi.url, {
+        headers: { 'x-api-key': this.configLeaderboardApi.key },
       });
 
       for (let i = 0; i < response.data.leaderboard.length; i++) {
@@ -418,7 +415,9 @@ export class StatisticService {
     return zealyLeaderboard;
   }
 
-  async fetchBorrowLeaderboard(limit = this.LEADERBOARD_LIMIT): Promise<any[]> {
+  async fetchBorrowLeaderboard(
+    limit = this.configLeaderboardApi.queryLimit,
+  ): Promise<any[]> {
     const borrowLeadboard = [];
 
     try {
@@ -464,7 +463,7 @@ export class StatisticService {
         };
 
         if (rank <= limit) {
-          if (this.LEADERBOARD_SUINS !== 0) {
+          if (this.configLeaderboardApi.enableSuins) {
             boardItem.name = await this._suiService.getSuiName(sender);
           }
 
@@ -486,7 +485,9 @@ export class StatisticService {
     return borrowLeadboard;
   }
 
-  async fetchTvlLeaderboard(limit = this.LEADERBOARD_LIMIT): Promise<any[]> {
+  async fetchTvlLeaderboard(
+    limit = this.configLeaderboardApi.queryLimit,
+  ): Promise<any[]> {
     const tvlLeadboard = [];
 
     try {
@@ -596,7 +597,7 @@ export class StatisticService {
         };
 
         if (rank <= limit) {
-          if (this.LEADERBOARD_SUINS !== 0) {
+          if (this.configLeaderboardApi.enableSuins) {
             boardItem.name = await this._suiService.getSuiName(sender);
           }
 

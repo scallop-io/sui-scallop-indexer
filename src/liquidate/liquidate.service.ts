@@ -27,7 +27,6 @@ export class LiquidateService {
   ): Promise<any[]> {
     const eventId = await suiService.getLiquidateEventId();
     return await suiService.getEventsFromQuery(
-      // process.env.EVENT_LIQUIDATE,
       eventId,
       eventStateMap,
       async (item) => {

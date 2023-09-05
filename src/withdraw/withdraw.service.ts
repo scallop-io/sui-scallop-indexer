@@ -27,7 +27,6 @@ export class WithdrawService {
   ): Promise<any[]> {
     const eventId = await suiService.getCollateralWithdrawEventId();
     return await suiService.getEventsFromQuery(
-      // process.env.EVENT_COLLATERAL_WITHDRAW,
       eventId,
       eventStateMap,
       async (item) => {

@@ -1,17 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { Obligation, ObligationDocument } from './obligation.schema';
+import { ConfigService } from '@nestjs/config';
+import mongoose, { Model } from 'mongoose';
+import { ConfigInterface } from 'src/app.config';
 import { SuiService } from 'src/sui/sui.service';
 import { EventState } from 'src/eventstate/eventstate.schema';
-import * as mongoose from 'mongoose';
+import { Obligation, ObligationDocument } from './obligation.schema';
 
 @Injectable()
 export class ObligationService {
+  private readonly configSui: ConfigInterface['sui'];
+
   constructor(
+    private configService: ConfigService<ConfigInterface>,
     @InjectModel(Obligation.name)
     private obligationModel: Model<ObligationDocument>,
-  ) {}
+  ) {
+    this.configSui = this.configService.get('sui', { infer: true });
+  }
 
   // findOneByObligationId
   async findByObligation(
@@ -98,11 +104,10 @@ export class ObligationService {
   async getObligationsFromQueryEventByPages(
     suiService: SuiService,
     eventStateMap: Map<string, EventState>,
-    pageLimit = suiService.SUI_PAGE_LIMIT,
+    pageLimit = this.configSui.pageLimit,
   ): Promise<[any[], boolean]> {
     const eventId = await suiService.getObligationCreatedEventId();
     return await suiService.getEventsFromQueryByPages(
-      // process.env.EVENT_OBLIGATION_CREATED,
       eventId,
       eventStateMap,
       async (item) => {

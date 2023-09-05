@@ -1,5 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-// import { delay } from './common/utils/time';
+import { ConfigService } from '@nestjs/config';
+import * as mongoose from 'mongoose';
+import { ConfigInterface } from './app.config';
 import { ObligationService } from './obligation/obligation.service';
 import { DepositService } from './deposit/deposit.service';
 import { SuiService } from './sui/sui.service';
@@ -10,7 +12,6 @@ import { LiquidateService } from './liquidate/liquidate.service';
 import { BorrowDynamicService } from './borrow-dynamic/borrow-dynamic.service';
 import { EventStateService } from './eventstate/eventstate.service';
 import { InjectConnection } from '@nestjs/mongoose';
-import * as mongoose from 'mongoose';
 import { FlashloanService } from './flashloan/flashloan.service';
 import { StatisticService } from './statistic/statistic.service';
 import { MintService } from './mint/mint.service';
@@ -19,11 +20,8 @@ import { formatDate, consoleColors, delay } from './utils/common';
 
 @Injectable()
 export class AppService {
-  private INCLUDE_FLASHLOAN = Number(process.env.INCLUDE_FLASHLOAN) || 1;
-  private INCLUDE_LENDING = Number(process.env.INCLUDE_LENDING) || 0;
-  private INCLUDE_STATISTICS = Number(process.env.INCLUDE_STATISTICS) || 0;
-  private OBLIGATION_PAGE_LIMIT =
-    Number(process.env.OBLIGATION_PAGE_LIMIT) || 10;
+  private readonly configFeatures: ConfigInterface['features'];
+  private readonly configApp: ConfigInterface['app'];
 
   @Inject(SuiService)
   private readonly _suiService: SuiService;
@@ -65,12 +63,16 @@ export class AppService {
   private readonly _redeemService: RedeemService;
 
   constructor(
+    private configService: ConfigService<ConfigInterface>,
     @InjectConnection() private readonly connection: mongoose.Connection,
-  ) {}
+  ) {
+    this.configFeatures = this.configService.get('features', { infer: true });
+    this.configApp = this.configService.get('app', { infer: true });
+  }
 
   // default fetch obligations first to avoid re-query other events
   async updateObligationCreatedEvents(
-    pageLimit = this.OBLIGATION_PAGE_LIMIT,
+    pageLimit = this.configApp.obligationPageLimit,
   ): Promise<void> {
     const changedEventStateMap = new Map();
 
@@ -594,7 +596,7 @@ export class AppService {
 
   async start(): Promise<void> {
     while (true) {
-      const start = new Date().getTime();
+      const startTime = new Date().getTime();
       // SuiService.resetQueryCount();
 
       // Get & update liquidator related events
@@ -607,33 +609,52 @@ export class AppService {
         marketId,
       );
 
-      if (this.INCLUDE_FLASHLOAN !== 0) {
+      if (this.configFeatures.flashLoan) {
         // Get & update flashloan events
         await this.updateFlashloanRelatedEvents();
       }
 
-      if (this.INCLUDE_LENDING !== 0) {
+      if (this.configFeatures.lending) {
         // Get & update lending events
         const uniqueSenders = await this.updateLendingRelatedEvents();
         await this.updateSupplies(uniqueSenders);
       }
 
-      if (this.INCLUDE_STATISTICS !== 0) {
+      if (this.configFeatures.statistics) {
         // Get & update statistic & leaderboard (default 10 mins)
         await this._statisticService.updateMarketStatistic();
       }
 
-      const end = new Date().getTime();
-      const execTime = (end - start) / 1000;
-      console.log(
-        `[<${new Date()}>]==== loopQueryEvents : <${execTime}> secs ====`,
-      );
+      const endTime = new Date().getTime();
+      const elapsedTime = (endTime - startTime) / 1000;
+      if (
+        this.configFeatures.flashLoan ||
+        this.configFeatures.lending ||
+        this.configFeatures.statistics
+      ) {
+        console.log(
+          `${consoleColors.fg.green}[System] - ${
+            consoleColors.reset
+          }${formatDate(new Date())} ${consoleColors.fg.green}Log ${
+            consoleColors.fg.yellow
+          }[appService.start] ${consoleColors.fg.green}Loop Elapsed Time ${
+            consoleColors.fg.yellow
+          }+${elapsedTime}s${consoleColors.reset}`,
+        );
+      }
 
-      // if (execTime < Number(process.env.QUERY_INTERVAL_SECONDS)) {
-      //   await delay(
-      //     (Number(process.env.QUERY_INTERVAL_SECONDS) - execTime) * 1000,
-      //   );
-      // }
-    } //end while
+      if (elapsedTime < this.configApp.loopIntervalSeconds) {
+        console.log(
+          `${consoleColors.fg.green}[System] - ${
+            consoleColors.reset
+          }${formatDate(new Date())} ${consoleColors.fg.green}Log ${
+            consoleColors.fg.yellow
+          }[appService.start] ${consoleColors.fg.green}Loop Delay ${
+            consoleColors.fg.yellow
+          }+${this.configApp.loopIntervalSeconds}s${consoleColors.reset}`,
+        );
+        await delay((this.configApp.loopIntervalSeconds - elapsedTime) * 1000);
+      }
+    }
   }
 }
