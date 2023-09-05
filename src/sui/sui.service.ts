@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { NetworkType, SuiKit } from '@scallop-io/sui-kit';
 import axios from 'axios';
 import { BorrowDynamic } from 'src/borrow-dynamic/borrow-dynamic.schema';
-import { delay } from 'src/common/utils/time';
+import { delay } from 'src/utils/common';
 import { EventState } from 'src/eventstate/eventstate.schema';
 import { EventStateService } from 'src/eventstate/eventstate.service';
 import { Collateral, Debt } from 'src/obligation/obligation.schema';
