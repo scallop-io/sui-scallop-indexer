@@ -18,6 +18,10 @@ lerna-debug.log*
 /coverage
 /.nyc_output
 
+# Environment
+.env
+/tmp
+
 # IDEs and editors
 /.idea
 .project
@@ -25,9 +29,7 @@ lerna-debug.log*
 .c9/
 *.launch
 .settings/
-.env
 *.sublime-workspace
-/tmp
 
 # IDE - VSCode
 .vscode/*
