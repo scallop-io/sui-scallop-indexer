@@ -1,9 +1,10 @@
 import { PaginatedEvents } from '@mysten/sui.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { NetworkType, SuiKit } from '@scallop-io/sui-kit';
+import { SuiKit } from '@scallop-io/sui-kit';
+import { ScallopClient } from '@scallop-io/sui-scallop-sdk';
 import axios from 'axios';
-import { config, ConfigInterface } from 'src/app.config';
+import { ConfigInterface } from 'src/app.config';
 import { BorrowDynamic } from 'src/borrow-dynamic/borrow-dynamic.schema';
 import { delay } from 'src/utils/common';
 import { EventState } from 'src/eventstate/eventstate.schema';
@@ -17,7 +18,6 @@ export class SuiService {
   private readonly configProgram: ConfigInterface['program'];
   private readonly configSui: ConfigInterface['sui'];
 
-  private static _suiKit: SuiKit;
   private static _queryCount = 0;
 
   private _addresses = undefined;
@@ -37,7 +37,11 @@ export class SuiService {
   private _mintEventId = undefined;
   private _redeemEventId = undefined;
 
-  constructor(private configService: ConfigService<ConfigInterface>) {
+  constructor(
+    private configService: ConfigService<ConfigInterface>,
+    private scallopClient: ScallopClient,
+    private suiKit: SuiKit,
+  ) {
     this.configNetwork = this.configService.get('network', { infer: true });
     this.configScallopApi = this.configService.get('scallopApi', {
       infer: true,
@@ -219,39 +223,21 @@ export class SuiService {
     }
   }
 
-  public static getSuiKit() {
-    try {
-      if (!this._suiKit) {
-        const network = <NetworkType>config().network.cluster;
-        const fullNodeUrl = config().network.enpoint;
-        this._suiKit = new SuiKit({
-          networkType: network,
-          fullnodeUrl: fullNodeUrl,
-        });
-      }
-    } catch (e) {
-      console.error('Error caught while getSuiKit(): ', e);
-    }
-    return this._suiKit;
-  }
-
   async getCollaterals(parentId: string): Promise<Collateral[]> {
     const collaterals: Collateral[] = [];
     try {
-      const dynamicFields = await SuiService.getSuiKit()
+      const dynamicFields = await this.suiKit
         .provider()
         .getDynamicFields({ parentId: parentId });
       await this.checkRPCLimit();
       for (const item of dynamicFields.data) {
-        const fieldObjs = await SuiService.getSuiKit()
-          .provider()
-          .getDynamicFieldObject({
-            parentId: parentId,
-            name: {
-              type: item.name.type,
-              value: item.name.value,
-            },
-          });
+        const fieldObjs = await this.suiKit.provider().getDynamicFieldObject({
+          parentId: parentId,
+          name: {
+            type: item.name.type,
+            value: item.name.value,
+          },
+        });
         await this.checkRPCLimit();
 
         let amount = '';
@@ -275,20 +261,18 @@ export class SuiService {
   async getDebts(parentId: string): Promise<Debt[]> {
     const debts: Debt[] = [];
     try {
-      const dynamicFields = await SuiService.getSuiKit()
+      const dynamicFields = await this.suiKit
         .provider()
         .getDynamicFields({ parentId: parentId });
       await this.checkRPCLimit();
       for (const item of dynamicFields.data) {
-        const fieldObjs = await SuiService.getSuiKit()
-          .provider()
-          .getDynamicFieldObject({
-            parentId: parentId,
-            name: {
-              type: item.name.type,
-              value: item.name.value,
-            },
-          });
+        const fieldObjs = await this.suiKit.provider().getDynamicFieldObject({
+          parentId: parentId,
+          name: {
+            type: item.name.type,
+            value: item.name.value,
+          },
+        });
         await this.checkRPCLimit();
 
         let amount = '';
@@ -315,12 +299,12 @@ export class SuiService {
   async getBorrowDynamics(market: string): Promise<Map<string, BorrowDynamic>> {
     const borrowDynamics = new Map<string, BorrowDynamic>();
     try {
-      const objs = await SuiService.getSuiKit().getObjects([market]);
+      const objs = await this.suiKit.getObjects([market]);
       await this.checkRPCLimit();
       const marketObj = objs[0];
       for (const content of marketObj.objectFields.borrow_dynamics.fields.keys
         .fields.contents) {
-        const dynamicObjects = await SuiService.getSuiKit()
+        const dynamicObjects = await this.suiKit
           .provider()
           .getDynamicFieldObject({
             parentId:
@@ -383,28 +367,26 @@ export class SuiService {
       let pageCount = 0;
       while (hasNextPage) {
         if (cursorTxDigest === undefined || cursorEventSeq === undefined) {
-          latestEvent =
-            await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
-              query: {
-                MoveEventType: eventType,
-              },
-              limit: this.configSui.queryLimit,
-              order: 'ascending',
-            });
+          latestEvent = await this.suiKit.provider().queryEvents({
+            query: {
+              MoveEventType: eventType,
+            },
+            limit: this.configSui.queryLimit,
+            order: 'ascending',
+          });
           console.debug(`[${eventName}]: query from <start>.`);
         } else {
-          latestEvent =
-            await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
-              query: {
-                MoveEventType: eventType,
-              },
-              cursor: {
-                txDigest: cursorTxDigest,
-                eventSeq: cursorEventSeq,
-              },
-              limit: this.configSui.queryLimit,
-              order: 'ascending',
-            });
+          latestEvent = await this.suiKit.provider().queryEvents({
+            query: {
+              MoveEventType: eventType,
+            },
+            cursor: {
+              txDigest: cursorTxDigest,
+              eventSeq: cursorEventSeq,
+            },
+            limit: this.configSui.queryLimit,
+            order: 'ascending',
+          });
           console.debug(
             `[${eventName}]: query from cursor <${cursorTxDigest}>, seq<${cursorEventSeq}>`,
           );
@@ -488,7 +470,7 @@ export class SuiService {
   }
 
   // async getObligationVersion(obligation_id: string): Promise<string> {
-  //   const obj = await SuiService.getSuiKit()
+  //   const obj = await this.suiKit
   //     .provider()
   //     .getObject({
   //       id: obligation_id,
@@ -516,9 +498,7 @@ export class SuiService {
           Math.min(this.configSui.queryLimit, keys.length),
         );
 
-        const obligationObjs = await SuiService.getSuiKit().getObjects(
-          currentBatchOfKeys,
-        );
+        const obligationObjs = await this.suiKit.getObjects(currentBatchOfKeys);
         await this.checkRPCLimit();
         for (const obj of obligationObjs) {
           if (obligationsMap.has(obj.objectId)) {
@@ -547,11 +527,9 @@ export class SuiService {
     let suiName = address;
     try {
       // get default suiNS
-      const suiNameObj = await SuiService.getSuiKit()
-        .provider()
-        .resolveNameServiceNames({
-          address: address,
-        });
+      const suiNameObj = await this.suiKit.provider().resolveNameServiceNames({
+        address: address,
+      });
 
       if (suiNameObj.data.length > 0) {
         suiName = suiNameObj.data[0];
@@ -562,18 +540,16 @@ export class SuiService {
           packageId =
             '0x701b8ca1c40f11288a1ed2de0a9a2713e972524fbab748a7e6c137225361653f';
         }
-        const suinsRegistration = await SuiService.getSuiKit()
-          .provider()
-          .getOwnedObjects({
-            owner: address,
-            filter: {
-              StructType: packageId + '::suins_registration::SuinsRegistration',
-            },
-            options: {
-              showContent: true,
-              showDisplay: true,
-            },
-          });
+        const suinsRegistration = await this.suiKit.provider().getOwnedObjects({
+          owner: address,
+          filter: {
+            StructType: packageId + '::suins_registration::SuinsRegistration',
+          },
+          options: {
+            showContent: true,
+            showDisplay: true,
+          },
+        });
         if (suinsRegistration.data.length > 0) {
           // set 1st suiNS as default
           suiName = suinsRegistration.data[0].data.display.data['name'];

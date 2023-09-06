@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { config } from './app.config';
-import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
+import { config } from '@/app.config';
+import { AppService } from '@/app.service';
+import { GlobalModule } from '@/modules/global';
 import { ObligationModule } from './obligation/obligation.module';
 import { DepositModule } from './deposit/deposit.module';
 import { SuiModule } from './sui/sui.module';
@@ -28,6 +29,7 @@ import { SupplyModule } from './supply/supply.module';
       // if the replica is only 1, set directConnection to `true`
       directConnection: false,
     }),
+    GlobalModule,
     SuiModule,
     EventStateModule,
     ObligationModule,
