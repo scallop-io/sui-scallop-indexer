@@ -25,8 +25,10 @@ export class BorrowService {
     suiService: SuiService,
     eventStateMap: Map<string, EventState>,
   ): Promise<any[]> {
+    const eventId = await suiService.getBorrowEventId();
     return await suiService.getEventsFromQuery(
-      process.env.EVENT_BORROW,
+      // process.env.EVENT_BORROW,
+      eventId,
       eventStateMap,
       async (item) => {
         return {
