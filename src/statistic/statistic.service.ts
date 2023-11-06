@@ -443,7 +443,10 @@ export class StatisticService {
           if (senderBorrowMap.has(sender.sender)) {
             senderBorrowValue += senderBorrowMap.get(sender.sender);
           }
-          senderBorrowMap.set(sender.sender, senderBorrowValue);
+
+          if (senderBorrowValue > 0) {
+            senderBorrowMap.set(sender.sender, senderBorrowValue);
+          }
         }
       }
 
