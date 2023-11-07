@@ -42,7 +42,7 @@ export class Obligation {
   @Prop()
   obligation_key: string;
 
-  @Prop({ index: true })
+  @Prop()
   sender?: string;
 
   @Prop()
@@ -51,10 +51,10 @@ export class Obligation {
   @Prop()
   timestampMs?: string;
 
-  @Prop({ default: [], index: true })
+  @Prop({ default: [] })
   collaterals?: Collateral[];
 
-  @Prop({ default: [], index: true })
+  @Prop({ default: [] })
   debts?: Debt[];
 
   @Prop()
