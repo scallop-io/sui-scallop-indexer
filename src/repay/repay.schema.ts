@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { now, Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 import { Obligation } from 'src/obligation/obligation.schema';
 
 export type RepayDocument = Repay & Document;
@@ -31,11 +31,11 @@ export class Repay {
   @Prop({ type: Types.ObjectId, ref: 'Obligation' })
   obligation?: Obligation;
 
-  @Prop({ default: now().toString() })
-  createdAt?: string;
+  // @Prop({ default: now().toString() })
+  // createdAt?: string;
 
-  @Prop({ default: now().toString() })
-  updatedAt?: string;
+  // @Prop({ default: now().toString() })
+  // updatedAt?: string;
 }
 
 export const RepaySchema = SchemaFactory.createForClass(Repay);

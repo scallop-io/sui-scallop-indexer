@@ -1,7 +1,16 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
-export type FlashloanDocument = Flashloan & Document;
+export type SupplyDocument = Supply & Document;
+
+@Schema({ _id: false })
+export class Asset {
+  @Prop()
+  coin?: string;
+
+  @Prop()
+  balance?: string;
+}
 
 @Schema({
   versionKey: 'version',
@@ -14,21 +23,12 @@ export type FlashloanDocument = Flashloan & Document;
   toObject: { virtuals: true },
   timestamps: true,
 })
-export class Flashloan {
-  @Prop()
-  type?: string;
+export class Supply {
+  @Prop({ required: true, index: true, unique: true })
+  sender?: string;
 
-  @Prop()
-  borrower?: string;
-
-  @Prop()
-  asset?: string;
-
-  @Prop()
-  amount?: string;
-
-  @Prop()
-  timestampMs?: string;
+  @Prop({ default: [] })
+  assets?: Asset[];
 
   // @Prop({ default: now().toString() })
   // createdAt?: string;
@@ -37,7 +37,7 @@ export class Flashloan {
   // updatedAt?: string;
 }
 
-export const FlashloanSchema = SchemaFactory.createForClass(Flashloan);
-FlashloanSchema.virtual('id').get(function () {
+export const SupplySchema = SchemaFactory.createForClass(Supply);
+SupplySchema.virtual('id').get(function () {
   return this._id.toHexString();
 });
