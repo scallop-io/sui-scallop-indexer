@@ -40,4 +40,24 @@ export class BorrowService {
       },
     );
   }
+
+  async getBorrowsV2FromQueryEvent(
+    suiService: SuiService,
+    eventStateMap: Map<string, EventState>,
+  ): Promise<any[]> {
+    const eventId = await suiService.getBorrowEventV2Id();
+    return await suiService.getEventsFromQuery(
+      eventId,
+      eventStateMap,
+      async (item) => {
+        return {
+          obligation_id: item.parsedJson.obligation,
+          asset: item.parsedJson.asset.name,
+          amount: item.parsedJson.amount,
+          borrowFee: item.parsedJson.borrow_fee,
+          timestampMs: item.timestampMs,
+        };
+      },
+    );
+  }
 }
