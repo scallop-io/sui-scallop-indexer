@@ -150,9 +150,12 @@ export class SuiService {
 
   public async getBorrowEventV2Id() {
     if (!this._borrowEventV2Id) {
-      const protocol = await this.getProtocolId();
-      this._borrowEventV2Id = `${protocol}::borrow::BorrowEventV2`;
-      // this._borrowEventV2Id = `0x9e30efa44fc125b7b704dab2ca3536a7d83228f00b0d1415569eed60455b9c06::borrow::BorrowEventV2`;
+      // const protocol = await this.getProtocolId();
+      // this._borrowEventV2Id = `${protocol}::borrow::BorrowEventV2`;
+
+      // Get BorrowEventV2 from this intermedia protocol id due to contract upgrade twice
+      this._borrowEventV2Id =
+        '0xc38f849e81cfe46d4e4320f508ea7dda42934a329d5a6571bb4c3cb6ea63f5da::borrow::BorrowEventV2';
     }
     return this._borrowEventV2Id;
   }
