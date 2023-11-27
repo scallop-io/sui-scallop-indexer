@@ -36,6 +36,7 @@ export class SuiService {
   private _collateralDepositEventId = undefined;
   private _collateralWithdrawEventId = undefined;
   private _borrowEventId = undefined;
+  private _borrowEventV2Id = undefined;
   private _repayEventId = undefined;
   private _liquidateEventId = undefined;
   private _flashloanBorrowEventId = undefined;
@@ -145,6 +146,18 @@ export class SuiService {
       this._borrowEventId = `${protocol}::borrow::BorrowEvent`;
     }
     return this._borrowEventId;
+  }
+
+  public async getBorrowEventV2Id() {
+    if (!this._borrowEventV2Id) {
+      // const protocol = await this.getProtocolId();
+      // this._borrowEventV2Id = `${protocol}::borrow::BorrowEventV2`;
+
+      // Get BorrowEventV2 from this intermedia protocol id due to contract upgrade twice
+      this._borrowEventV2Id =
+        '0xc38f849e81cfe46d4e4320f508ea7dda42934a329d5a6571bb4c3cb6ea63f5da::borrow::BorrowEventV2';
+    }
+    return this._borrowEventV2Id;
   }
 
   public async getRepayEventId() {
