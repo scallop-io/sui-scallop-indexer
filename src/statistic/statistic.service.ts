@@ -9,6 +9,8 @@ import { ObligationService } from 'src/obligation/obligation.service';
 import { SupplyService } from 'src/supply/supply.service';
 import { MintService } from 'src/mint/mint.service';
 import { RedeemService } from 'src/redeem/redeem.service';
+import { SnapshotService } from '../snapshot/snapshot.service';
+import { Snapshot } from '../snapshot/snapshot.schema';
 
 @Injectable()
 export class StatisticService {
@@ -26,6 +28,9 @@ export class StatisticService {
 
   @Inject(RedeemService)
   private readonly _redeemService: RedeemService;
+
+  @Inject(SnapshotService)
+  private readonly _snapshotService: SnapshotService;
 
   private static _logTime = new Date().getTime();
 
@@ -87,16 +92,23 @@ export class StatisticService {
       '06864a6f921804860930db6ddbe2e16acdf8504495ea7481637a1c8b9a8fe54b::cetus::CETUS',
       9,
     ],
+    // AFSUI
+    [
+      'f325ce1300e8dac124071d3152c5c5ee6174914f8bc2161e88329cf579246efc::afsui::AFSUI',
+      9,
+    ],
+    // HASUI
+    [
+      'bde4ba4c2e274a60ce15c1cfff9e5c42e41654ac8b6d906a57efa4bd3c29f47d::hasui::HASUI',
+      9,
+    ],
+    // VSUI
+    [
+      '549e8b69270defbfafd4f94e17ec44cdbdd99820b33bda2278dea3b9a32d3f55::cert::CERT',
+      9,
+    ],
   ]);
 
-  // private COIN_DECIMALS = new Map<string, number>([
-  //   ['SUI', 9],
-  //   ['USDC', 6],
-  //   ['USDT', 6],
-  //   ['ETH', 8],
-  //   ['SOL', 8],
-  //   ['BTC', 8],
-  // ]);
   private WORMHOLE_COINS = new Map<string, string>([
     [
       '5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf',
@@ -121,6 +133,10 @@ export class StatisticService {
     ['SOL', 'solana'],
     ['CETUS', 'cetus-protocol'],
     ['APT', 'aptos'],
+    ['AFSUI', 'sui'],
+    ['HASUI', 'sui'],
+    ['VSUI', 'sui'],
+    ['CERT', 'sui'],
   ]);
 
   static resetLogTime() {
@@ -157,13 +173,18 @@ export class StatisticService {
       const coinContract = coinType.split('::')[0];
       coinSymbol = this.WORMHOLE_COINS.get(coinContract);
     }
+
+    if (coinSymbol === 'CERT') {
+      coinSymbol = 'VSUI';
+    }
     return coinSymbol || '';
   }
 
   async getCoinPriceFromCoinGecko(symbol = 'USDC'): Promise<number> {
     let coinPrice = 0;
+    let coinId = '';
     try {
-      const coinId = this.COIN_GECKO_IDS.get(symbol);
+      coinId = this.COIN_GECKO_IDS.get(symbol);
       if (coinId) {
         const response = await axios.get(
           `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`,
@@ -174,48 +195,93 @@ export class StatisticService {
       }
     } catch (error) {
       console.error(
-        `Error caught while getCoinPriceFromCoinGecko(${symbol}): ${error}`,
+        `Error caught while getCoinPriceFromCoinGecko(${symbol})[${coinId}]: ${error}`,
       );
     }
 
     return coinPrice;
   }
 
-  async getCoinPriceFromBinance(symbol = 'USDT'): Promise<number> {
-    let coinPrice = 0;
-    try {
-      if (symbol === 'USDT') {
-        return 1;
-      } else {
-        const response = await axios.get(
-          `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}USDT`,
-        );
-        if (response.data.price) {
-          coinPrice = Number(response.data.price);
-        }
-      }
-    } catch (error) {
-      console.error(
-        `Error caught while getCoinPriceFromBinance(${symbol}): ${error}`,
-      );
-    }
-
-    return coinPrice;
+  async delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async getCoinPriceMap(): Promise<Map<string, number>> {
     if (this._coinPriceMap.size === 0) {
       try {
+        let reqCount = 0;
         for (const coinType of this.COIN_DECIMALS.keys()) {
+          // delay 1 sec to avoid rate limit
+          if (reqCount % 5 === 0) {
+            await this.delay(1000);
+          }
           const coinSymbol = this.getCoinSymbol(coinType);
-          const coinPrice = await this.getCoinPriceFromCoinGecko(coinSymbol);
+          let coinPrice = 0;
+          // LSD Tokens (*SUI) use SUI price temporarily
+          if (coinSymbol.length > 3 && coinSymbol.endsWith('SUI')) {
+            coinPrice =
+              this._coinPriceMap.get(
+                '0000000000000000000000000000000000000000000000000000000000000002::sui::SUI',
+              ) || 0;
+          } else {
+            coinPrice = await this.getCoinPriceFromCoinGecko(coinSymbol);
+          }
+
           // console.log(`[CoinPrice]: ${coinSymbol} <${coinPrice}>`);
           this._coinPriceMap.set(coinType, coinPrice);
+          reqCount += 1;
         }
       } catch (error) {
         console.error('Error caught while getCoinPriceMap() ', error);
       }
     }
+    // const priceMap = new Map<string, number>([
+    //   [
+    //     '0000000000000000000000000000000000000000000000000000000000000002::sui::SUI',
+    //     0.624468,
+    //   ],
+    //   [
+    //     '5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
+    //     1,
+    //   ],
+    //   [
+    //     'c060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN',
+    //     1.004,
+    //   ],
+    //   [
+    //     'af8cd5edc19c4512f4259f0bee101a40d41ebed738ade5874359610ef8eeced5::coin::COIN',
+    //     2250.4,
+    //   ],
+    //   [
+    //     'b7844e289a8410e50fb3ca48d69eb9cf29e27d223ef90353fe1bd8e27ff8f3f8::coin::COIN',
+    //     61.81,
+    //   ],
+    //   [
+    //     '027792d9fed7f9844eb4839566001bb6f6cb4804f66aa2da6fe1ee242d896881::coin::COIN',
+    //     42248,
+    //   ],
+    //   [
+    //     '3a5143bb1196e3bcdfab6203d1683ae29edd26294fc8bfeafe4aaa9d2704df37::coin::COIN',
+    //     7.54,
+    //   ],
+    //   [
+    //     '06864a6f921804860930db6ddbe2e16acdf8504495ea7481637a1c8b9a8fe54b::cetus::CETUS',
+    //     0.053125,
+    //   ],
+    //   [
+    //     'f325ce1300e8dac124071d3152c5c5ee6174914f8bc2161e88329cf579246efc::afsui::AFSUI',
+    //     0.624468,
+    //   ],
+    //   [
+    //     'bde4ba4c2e274a60ce15c1cfff9e5c42e41654ac8b6d906a57efa4bd3c29f47d::hasui::HASUI',
+    //     0.624468,
+    //   ],
+    //   [
+    //     '549e8b69270defbfafd4f94e17ec44cdbdd99820b33bda2278dea3b9a32d3f55::cert::CERT',
+    //     0.624468,
+    //   ],
+    // ]);
+    // this._coinPriceMap = priceMap;
 
     return this._coinPriceMap;
   }
@@ -693,5 +759,169 @@ export class StatisticService {
     }
 
     return supplies;
+  }
+
+  async snapshotAll(): Promise<void> {
+    const startTime = new Date().getTime();
+    const coinPriceMap = await this.getCoinPriceMap();
+    console.log(`[SnapshotAll]-${startTime.toString()}: `);
+    console.log(coinPriceMap);
+    await this.snapshotAllSupplies();
+    await this.snapshotAllObligations();
+  }
+
+  async snapshotAllObligations(): Promise<void> {
+    try {
+      const batchLog = Number(process.env.SNAPSHOT_BATCH_LOG) || 1;
+      const isShowBatchLog = batchLog === 1 ? true : false;
+      const startTime = new Date().getTime();
+      // get all distinct senders
+      const senders = await this._obligationService.findDistinctSenders();
+      let count = 0;
+      for (const sender of senders) {
+        const saveSnapshot = await this.snapshotSender(sender);
+        count += 1;
+        if (isShowBatchLog) {
+          const tvl = saveSnapshot?.tvl || 0;
+          console.log(
+            `[Snapshot-Obligations]: (${count}/${senders.length})]: <${sender}> tvl<${tvl}> `,
+          );
+        }
+      }
+      const endTime = new Date().getTime();
+      const batchExecTime = (endTime - startTime) / 1000;
+      console.log(
+        `[Snapshot-Obligations]: <${senders.length}>, <${batchExecTime}> sec.`,
+      );
+    } catch (e) {
+      console.error(`Error caught while snapshotAllObligations() ${e}`);
+    }
+  }
+
+  async snapshotAllSupplies(): Promise<void> {
+    try {
+      const startTime = new Date().getTime();
+
+      // get all senders batch by batch
+      const batchLog = Number(process.env.SNAPSHOT_BATCH_LOG) || 1;
+      const isShowBatchLog = batchLog === 1 ? true : false;
+      const batchSize = Number(process.env.SNAPSHOT_BATCH_SIZE) || 1000;
+      let batchNumber = Number(process.env.SNAPSHOT_BATCH_START) || 1;
+      let totalSupplyCount = 0;
+      let batchStartTime;
+      let batchEndTime;
+      while (true) {
+        batchStartTime = new Date().getTime();
+        const batchSupplies = await this._supplyService.findBatch(
+          batchSize,
+          batchNumber,
+        );
+        totalSupplyCount += batchSupplies.length;
+
+        if (batchSupplies.length === 0) {
+          break;
+        }
+
+        let batchCount = 0;
+        for (const supply of batchSupplies) {
+          batchCount += 1;
+          const saveSnapshot = await this.snapshotSender(supply.sender);
+          if (isShowBatchLog) {
+            console.log(
+              `[Snapshot-Supplies]: Batch[${batchNumber}](${batchCount}/${batchSupplies.length})]: <${saveSnapshot.sender}> tvl<${saveSnapshot.tvl}> `,
+            );
+          }
+        }
+        batchEndTime = new Date().getTime();
+        const batchExecTime = (batchEndTime - batchStartTime) / 1000;
+        console.log(
+          `[Snapshot-Supplies]: Batch[${batchNumber}]<${batchSupplies.length}>, <${batchExecTime}> sec.`,
+        );
+
+        batchNumber += 1;
+      } //end of while
+
+      const endTime = new Date().getTime();
+      const execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[Snapshot-Supplies]: Total<${totalSupplyCount}>  , <${execTime}> sec.`,
+      );
+    } catch (e) {
+      console.error(`Error caught while snapshotAllSupplies() ${e}`);
+    }
+  }
+
+  async snapshotSender(sender: string): Promise<Snapshot> {
+    try {
+      // const startTime = new Date().getTime();
+      // console.log(`[Snapshot]- sender<>${sender}>`);
+
+      const coinPriceMap = await this.getCoinPriceMap();
+      // calculate supply value of sender
+      let senderSupplyValue = 0;
+      const senderSupply = await this._supplyService.findBySender(sender);
+      if (senderSupply.length > 0) {
+        const senderSupplyAssets = senderSupply[0].assets;
+        // console.log(`[Snapshot]- senderSupply: ${senderSupply}`);
+        for (const asset of senderSupplyAssets) {
+          const coinPrice = coinPriceMap.get(asset.coin) || 0;
+          const multiple = this.getDecimalMultiplier(asset.coin);
+          const coinValue = Number(asset.balance) * multiple * coinPrice;
+          // console.log(`[Snapshot]- <${asset.coin}>@<${coinPrice}>= ${coinValue}`);
+          senderSupplyValue += coinValue;
+        }
+      }
+
+      // calculate collateral & borrow value of sender
+      let senderCollateralValue = 0;
+      let senderBorrowValue = 0;
+      const senderObligations = await this._obligationService.findBySender(
+        sender,
+      );
+      for (const senderObligation of senderObligations) {
+        for (const collateral of senderObligation.collaterals) {
+          const coinPrice = coinPriceMap.get(collateral.asset) || 0;
+          const multiple = this.getDecimalMultiplier(collateral.asset);
+          const coinValue = Number(collateral.amount) * multiple * coinPrice;
+          senderCollateralValue += coinValue;
+        }
+        for (const debt of senderObligation.debts) {
+          const coinPrice = coinPriceMap.get(debt.asset) || 0;
+          const multiple = this.getDecimalMultiplier(debt.asset);
+          const coinValue = Number(debt.amount) * multiple * coinPrice;
+          senderBorrowValue += coinValue;
+        }
+      }
+      // console.log(`[Snapshot]- senderObligations: ${senderObligations}`);
+      const senderTvl =
+        senderSupplyValue + senderCollateralValue - senderBorrowValue;
+      const snapshot = {
+        sender: sender,
+        supplyValue: senderSupplyValue,
+        collateralValue: senderCollateralValue,
+        borrowValue: senderBorrowValue,
+        tvl: senderTvl,
+      };
+
+      let saveSnapshot;
+      if (senderTvl > 0) {
+        saveSnapshot = await this._snapshotService.findOneBySenderAndUpdate(
+          sender,
+          snapshot,
+        );
+      }
+
+      // console.log(saveSnapshot);
+
+      // const end = new Date().getTime();
+      // const execTime = (end - startTime) / 1000;
+      // console.log(
+      //   `[Snapshot]: <${sender}> supplyValue<${senderSupplyValue}>, colValue<${senderCollateralValue}>, borrowValue<${senderBorrowValue}>  , <${execTime}> sec.`,
+      // );
+
+      return saveSnapshot;
+    } catch (e) {
+      console.error(`Error caught while snapshotSender() <${sender}> ${e}`);
+    }
   }
 }

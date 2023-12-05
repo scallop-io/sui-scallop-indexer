@@ -131,8 +131,16 @@ export class ObligationService {
     return this.obligationModel.findOne({ obligation_id: id }).exec();
   }
 
-  async findObligationsBySender(sender: string): Promise<Obligation[]> {
+  async findBySender(sender: string): Promise<Obligation[]> {
     return this.obligationModel.find({ sender: sender }).exec();
+  }
+
+  async findDistinctSenders(): Promise<string[]> {
+    const distinctSenders = await this.obligationModel
+      .distinct('sender')
+      .exec();
+
+    return distinctSenders;
   }
 
   async findDistinctCoins(field: string): Promise<any> {

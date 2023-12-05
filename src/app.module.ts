@@ -17,6 +17,7 @@ import { StatisticModule } from './statistic/statistic.module';
 import { MintModule } from './mint/mint.module';
 import { RedeemModule } from './redeem/redeem.module';
 import { SupplyModule } from './supply/supply.module';
+import { SnapshotModule } from './snapshot/snapshot.module';
 
 dotenv.config();
 
@@ -43,6 +44,7 @@ dotenv.config();
     MintModule,
     RedeemModule,
     SupplyModule,
+    SnapshotModule,
   ],
   providers: [AppService],
 })

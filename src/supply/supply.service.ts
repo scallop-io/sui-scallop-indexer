@@ -23,16 +23,10 @@ export class SupplyService {
     return this.supplyModel.find().exec();
   }
 
-  // async findSuppliesWithBalance(): Promise<Supply[]> {
-  //   return (
-  //     this.supplyModel
-  //       .find({
-  //         'assets.0': { $exists: true },
-  //       })
-  //       // .limit(100)
-  //       .exec()
-  //   );
-  // }
+  async findBatch(batchSize: number, batchNumber: number): Promise<Supply[]> {
+    const skipNumber = (batchNumber - 1) * batchSize;
+    return this.supplyModel.find().skip(skipNumber).limit(batchSize).exec();
+  }
 
   // findBySender
   async findBySender(sender: string): Promise<Supply[]> {

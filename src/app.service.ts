@@ -1,5 +1,4 @@
 import { Inject, Injectable } from '@nestjs/common';
-// import { delay } from './common/utils/time';
 import { ObligationService } from './obligation/obligation.service';
 import { DepositService } from './deposit/deposit.service';
 import { SuiService } from './sui/sui.service';
@@ -15,6 +14,7 @@ import { FlashloanService } from './flashloan/flashloan.service';
 import { StatisticService } from './statistic/statistic.service';
 import { MintService } from './mint/mint.service';
 import { RedeemService } from './redeem/redeem.service';
+import { SnapshotService } from './snapshot/snapshot.service';
 
 @Injectable()
 export class AppService {
@@ -62,6 +62,9 @@ export class AppService {
 
   @Inject(RedeemService)
   private readonly _redeemService: RedeemService;
+
+  @Inject(SnapshotService)
+  private readonly _snapshotService: SnapshotService;
 
   constructor(
     @InjectConnection() private readonly connection: mongoose.Connection,
@@ -640,5 +643,15 @@ export class AppService {
       //   );
       // }
     } //end while
+  }
+
+  async takeSnapshot(): Promise<void> {
+    const start = new Date().getTime();
+
+    await this._statisticService.snapshotAll();
+
+    const end = new Date().getTime();
+    const execTime = (end - start) / 1000;
+    console.log(`[<${new Date()}>]==== takeSnapshot : <${execTime}> secs ====`);
   }
 }
