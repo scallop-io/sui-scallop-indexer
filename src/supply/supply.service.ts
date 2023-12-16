@@ -28,6 +28,14 @@ export class SupplyService {
     return this.supplyModel.find().skip(skipNumber).limit(batchSize).exec();
   }
 
+  async findSubset(
+    subsetSize: number,
+    subsetNumber: number,
+  ): Promise<Supply[]> {
+    const skipNumber = (subsetNumber - 1) * subsetSize;
+    return this.supplyModel.find().skip(skipNumber).limit(subsetSize).exec();
+  }
+
   // findBySender
   async findBySender(sender: string): Promise<Supply[]> {
     return this.supplyModel.find({ sender: sender }).exec();

@@ -8,6 +8,7 @@ import { SupplyModule } from 'src/supply/supply.module';
 import { MintModule } from 'src/mint/mint.module';
 import { RedeemModule } from 'src/redeem/redeem.module';
 import { SnapshotModule } from '../snapshot/snapshot.module';
+import { SnapbatchModule } from 'src/snapbatch/snapbatch.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { SnapshotModule } from '../snapshot/snapshot.module';
     MintModule,
     RedeemModule,
     SnapshotModule,
+    SnapbatchModule,
   ],
   providers: [StatisticService],
   exports: [StatisticService],

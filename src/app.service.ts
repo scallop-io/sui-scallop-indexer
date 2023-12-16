@@ -648,7 +648,8 @@ export class AppService {
   async takeSnapshot(): Promise<void> {
     const start = new Date().getTime();
 
-    await this._statisticService.snapshotAll();
+    // await this._statisticService.snapshotAll();
+    await this._statisticService.phase1Snapbatch();
 
     const end = new Date().getTime();
     const execTime = (end - start) / 1000;

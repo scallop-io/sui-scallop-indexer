@@ -18,6 +18,7 @@ import { MintModule } from './mint/mint.module';
 import { RedeemModule } from './redeem/redeem.module';
 import { SupplyModule } from './supply/supply.module';
 import { SnapshotModule } from './snapshot/snapshot.module';
+import { SnapbatchModule } from './snapbatch/snapbatch.module';
 
 dotenv.config();
 
@@ -45,6 +46,7 @@ dotenv.config();
     RedeemModule,
     SupplyModule,
     SnapshotModule,
+    SnapbatchModule,
   ],
   providers: [AppService],
 })
