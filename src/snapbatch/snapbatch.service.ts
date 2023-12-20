@@ -42,4 +42,18 @@ export class SnapbatchService {
       .session(session)
       .exec();
   }
+
+  async findSubset(
+    subsetSize: number,
+    subsetNumber: number,
+  ): Promise<Snapbatch[]> {
+    const skipNumber = (subsetNumber - 1) * subsetSize;
+
+    return this.snapbatchModel
+      .find()
+      .sort({ supplyValue: -1 }) // Sorting by 'supplyValue' in descending order
+      .skip(skipNumber)
+      .limit(subsetSize)
+      .exec();
+  }
 }

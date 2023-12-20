@@ -154,7 +154,7 @@ export class AppService {
   async updateLiqudationRelatedEvents(
     hasCollateralsChanged = false,
     hasDebtsChanged = false,
-  ): Promise<void> {
+  ): Promise<string[]> {
     let startTime;
     let endTime;
     let execTime;
@@ -368,6 +368,8 @@ export class AppService {
           }
         }
 
+        // Get unique obligations
+        const uniqueSenderSet = new Set<string>();
         for (const [obligationId, obligation] of updatingObligationMap) {
           const dbObligation = await this._obligationService.findByObligation(
             obligationId,
@@ -378,12 +380,14 @@ export class AppService {
           dbObligation.collaterals_count = obligation.collaterals.length;
           dbObligation.debts_count = obligation.debts.length;
 
-          // const savedObligation =
-          await this._obligationService.findOneAndUpdateObligation(
-            obligationId,
-            dbObligation,
-            transactionSession,
-          );
+          const savedObligation =
+            await this._obligationService.findOneAndUpdateObligation(
+              obligationId,
+              dbObligation,
+              transactionSession,
+            );
+
+          uniqueSenderSet.add(savedObligation.sender);
           // console.log(
           //   `[CollateralsDebts]: update collaterals<${obligation.collaterals.length}>, debts<${obligation.debts.length}> in <${savedObligation.obligation_id}>`,
           // );
@@ -410,6 +414,9 @@ export class AppService {
         if (transactionSession) {
           await transactionSession.commitTransaction();
         }
+
+        const uniqueSenders: string[] = [...uniqueSenderSet];
+        return uniqueSenders;
       } catch (e) {
         if (transactionSession) {
           await transactionSession.abortTransaction();
@@ -606,7 +613,8 @@ export class AppService {
       // SuiService.resetQueryCount();
 
       // Get & update liquidator related events
-      await this.updateLiqudationRelatedEvents();
+      const uniqueObligationSenders =
+        await this.updateLiqudationRelatedEvents();
 
       // update borrow dynamics
       const marketId = await this._suiService.getMarketId();
@@ -649,7 +657,8 @@ export class AppService {
     const start = new Date().getTime();
 
     // await this._statisticService.snapshotAll();
-    await this._statisticService.phase1Snapbatch();
+    // await this._statisticService.phase1Snapbatch();
+    await this._statisticService.recalculateSnapbatchValues();
 
     const end = new Date().getTime();
     const execTime = (end - start) / 1000;
