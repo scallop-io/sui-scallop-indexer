@@ -522,21 +522,25 @@ export class SuiService {
           Math.min(this.SUI_QUERY_LIMIT, keys.length),
         );
 
-        const obligationObjs = await SuiService.getSuiKit().getObjects(
-          currentBatchOfKeys,
-        );
+        const obligationObjs = await SuiService.getSuiKit().rpcProvider.provider.multiGetObjects({
+          ids: currentBatchOfKeys,
+          options: {
+            showContent: true,
+            showOwner: true,
+          },
+        });
         await this.checkRPCLimit();
         for (const obj of obligationObjs) {
-          if (obligationsMap.has(obj.objectId)) {
+          if (obligationsMap.has(obj.data.objectId)) {
             // set obligation version
-            obligationsMap.get(obj.objectId).version =
-              obj.objectVersion.toString();
+            obligationsMap.get(obj.data.objectId).version =
+              obj.data.owner['Shared'].initial_shared_version.toString();
             // set collaterals parent id
-            obligationsMap.get(obj.objectId).collaterals_parent_id =
-              obj.objectFields['collaterals'].fields.table.fields.id.id;
+            obligationsMap.get(obj.data.objectId).collaterals_parent_id =
+              obj.data.content['fields'].collaterals.fields.table.fields.id.id;
             // set debts parent id
-            obligationsMap.get(obj.objectId).debts_parent_id =
-              obj.objectFields['debts'].fields.table.fields.id.id;
+            obligationsMap.get(obj.data.objectId).debts_parent_id =
+              obj.data.content['fields'].debts.fields.table.fields.id.id;
           }
         }
       } //end while
