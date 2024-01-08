@@ -60,4 +60,30 @@ export class BorrowService {
       },
     );
   }
+
+  async findByObligationIdAt(
+    obligationId: string,
+    snapTimestamp = new Date().getTime(),
+  ): Promise<Borrow[]> {
+    return this.borrowModel
+      .find({
+        obligation_id: obligationId,
+        timestampMs: { $lt: snapTimestamp },
+      })
+      .sort({ timestampMs: 1 })
+      .exec();
+  }
+
+  async findByObligationIdBefore(
+    obligationId: string,
+    snapTimestamp = new Date().getTime(),
+  ): Promise<Borrow[]> {
+    return this.borrowModel
+      .find({
+        obligation_id: obligationId,
+        timestampMs: { $lt: snapTimestamp },
+      })
+      .sort({ timestampMs: 1 })
+      .exec();
+  }
 }

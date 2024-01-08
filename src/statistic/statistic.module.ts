@@ -9,6 +9,10 @@ import { MintModule } from 'src/mint/mint.module';
 import { RedeemModule } from 'src/redeem/redeem.module';
 import { SnapshotModule } from '../snapshot/snapshot.module';
 import { SnapbatchModule } from 'src/snapbatch/snapbatch.module';
+import { DepositModule } from 'src/deposit/deposit.module';
+import { WithdrawModule } from 'src/withdraw/withdraw.module';
+import { BorrowModule } from 'src/borrow/borrow.module';
+import { RepayModule } from 'src/repay/repay.module';
 
 @Module({
   imports: [
@@ -20,6 +24,10 @@ import { SnapbatchModule } from 'src/snapbatch/snapbatch.module';
     SupplyModule,
     MintModule,
     RedeemModule,
+    DepositModule,
+    WithdrawModule,
+    BorrowModule,
+    RepayModule,
     SnapshotModule,
     SnapbatchModule,
   ],

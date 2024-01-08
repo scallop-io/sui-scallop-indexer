@@ -40,4 +40,30 @@ export class RepayService {
       },
     );
   }
+
+  async findByObligationIdAt(
+    obligationId: string,
+    snapTimestamp = new Date().getTime(),
+  ): Promise<Repay[]> {
+    return this.repayModel
+      .find({
+        obligation_id: obligationId,
+        timestampMs: { $lt: snapTimestamp },
+      })
+      .sort({ timestampMs: 1 })
+      .exec();
+  }
+
+  async findByObligationIdBefore(
+    obligationId: string,
+    snapTimestamp = new Date().getTime(),
+  ): Promise<Repay[]> {
+    return this.repayModel
+      .find({
+        obligation_id: obligationId,
+        timestampMs: { $lt: snapTimestamp },
+      })
+      .sort({ timestampMs: 1 })
+      .exec();
+  }
 }

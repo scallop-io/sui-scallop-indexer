@@ -30,6 +30,26 @@ export class RedeemService {
     return this.redeemModel.find({ sender: sender }).exec();
   }
 
+  async findBySenderAt(
+    sender: string,
+    snapTimestamp = new Date().getTime(),
+  ): Promise<Redeem[]> {
+    return this.redeemModel
+      .find({ sender: sender, timestampMs: { $lt: snapTimestamp } })
+      .sort({ timestampMs: 1 })
+      .exec();
+  }
+
+  async findBySenderBefore(
+    sender: string,
+    snapTimestamp = new Date().getTime(),
+  ): Promise<Redeem[]> {
+    return this.redeemModel
+      .find({ sender: sender, timestampMs: { $lt: snapTimestamp } })
+      .sort({ timestampMs: 1 })
+      .exec();
+  }
+
   async getRedeemsFromQueryEvent(
     suiService: SuiService,
     eventStateMap: Map<string, EventState>,

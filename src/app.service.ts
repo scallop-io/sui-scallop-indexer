@@ -15,6 +15,7 @@ import { StatisticService } from './statistic/statistic.service';
 import { MintService } from './mint/mint.service';
 import { RedeemService } from './redeem/redeem.service';
 import { SnapshotService } from './snapshot/snapshot.service';
+import { SnappriceService } from './snapprice/snapprice.service';
 
 @Injectable()
 export class AppService {
@@ -65,6 +66,9 @@ export class AppService {
 
   @Inject(SnapshotService)
   private readonly _snapshotService: SnapshotService;
+
+  @Inject(SnappriceService)
+  private readonly _snappriceService: SnappriceService;
 
   constructor(
     @InjectConnection() private readonly connection: mongoose.Connection,
@@ -659,7 +663,10 @@ export class AppService {
     // await this._statisticService.snapshotAll();
     // await this._statisticService.phase1Snapbatch();
     // await this._statisticService.recalculateSnapbatchValues();
-    await this._statisticService.phase2Snapbatch();
+    // await this._statisticService.phase2Snapbatch();
+
+    // await this._statisticService.phase2SnapshotBetween();
+    await this._snappriceService.snapshotCoinPriceBetween();
 
     const end = new Date().getTime();
     const execTime = (end - start) / 1000;

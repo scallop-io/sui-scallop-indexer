@@ -30,6 +30,26 @@ export class MintService {
     return this.mintModel.find({ sender: sender }).exec();
   }
 
+  async findBySenderAt(
+    sender: string,
+    snapTimestamp = new Date().getTime(),
+  ): Promise<Mint[]> {
+    return this.mintModel
+      .find({ sender: sender, timestampMs: { $lt: snapTimestamp } })
+      .sort({ timestampMs: 1 })
+      .exec();
+  }
+
+  async findBySenderBefore(
+    sender: string,
+    snapTimestamp = new Date().getTime(),
+  ): Promise<Mint[]> {
+    return this.mintModel
+      .find({ sender: sender, timestampMs: { $lt: snapTimestamp } })
+      .sort({ timestampMs: 1 })
+      .exec();
+  }
+
   async getMintsFromQueryEvent(
     suiService: SuiService,
     eventStateMap: Map<string, EventState>,
@@ -52,5 +72,60 @@ export class MintService {
         };
       },
     );
+  }
+
+  async countDistinctSendersBefore(
+    snapshotTimestamp = new Date().getTime(),
+  ): Promise<number> {
+    const aggregation = await this.mintModel
+      .aggregate([
+        {
+          $match: {
+            timestampMs: { $lt: snapshotTimestamp.toString() },
+          },
+        },
+        {
+          $group: {
+            _id: '$sender',
+          },
+        },
+        {
+          $count: 'distinctSendersCount',
+        },
+      ])
+      .exec();
+
+    return aggregation[0]?.distinctSendersCount || 0;
+  }
+
+  async findDistinctSendersBatchBefore(
+    snapTimestamp = new Date().getTime(),
+    batchNumber = 1,
+    batchSize = 1000,
+  ): Promise<string[]> {
+    const skipNumber = (batchNumber - 1) * batchSize;
+
+    const distinctSenders = await this.mintModel
+      .aggregate([
+        {
+          $match: {
+            timestampMs: { $lt: snapTimestamp.toString() },
+          },
+        },
+        {
+          $group: {
+            _id: '$sender',
+          },
+        },
+        {
+          $skip: skipNumber,
+        },
+        {
+          $limit: batchSize,
+        },
+      ])
+      .exec();
+
+    return distinctSenders.map((doc) => doc._id);
   }
 }

@@ -41,4 +41,23 @@ export class SnapshotService {
       .session(session)
       .exec();
   }
+
+  async findOneAndUpdateBySenderAt(
+    snapshotDay: string,
+    sender: string,
+    snapshot: Snapshot,
+    session: mongoose.ClientSession | null = null,
+  ): Promise<Snapshot> {
+    return this.snapshotModel
+      .findOneAndUpdate(
+        { sender: sender, snapshotDay: snapshotDay },
+        snapshot,
+        {
+          upsert: true,
+          new: true,
+        },
+      )
+      .session(session)
+      .exec();
+  }
 }

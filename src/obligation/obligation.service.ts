@@ -134,6 +134,25 @@ export class ObligationService {
   async findBySender(sender: string): Promise<Obligation[]> {
     return this.obligationModel.find({ sender: sender }).exec();
   }
+  async findBySenderAt(
+    sender: string,
+    snapTimestamp = new Date().getTime(),
+  ): Promise<Obligation[]> {
+    return this.obligationModel
+      .find({ sender: sender, timestampMs: { $lt: snapTimestamp } })
+      .sort({ timestampMs: 1 })
+      .exec();
+  }
+
+  async findBySenderBefore(
+    sender: string,
+    snapTimestamp = new Date().getTime(),
+  ): Promise<Obligation[]> {
+    return this.obligationModel
+      .find({ sender: sender, timestampMs: { $lt: snapTimestamp } })
+      .sort({ timestampMs: 1 })
+      .exec();
+  }
 
   async findDistinctSenders(): Promise<string[]> {
     const distinctSenders = await this.obligationModel
@@ -317,5 +336,60 @@ export class ObligationService {
         },
       ])
       .exec();
+  }
+
+  async countDistinctSendersBefore(
+    snapshotTimestamp = new Date().getTime(),
+  ): Promise<number> {
+    const aggregation = await this.obligationModel
+      .aggregate([
+        {
+          $match: {
+            timestampMs: { $lt: snapshotTimestamp.toString() },
+          },
+        },
+        {
+          $group: {
+            _id: '$sender',
+          },
+        },
+        {
+          $count: 'distinctSendersCount',
+        },
+      ])
+      .exec();
+
+    return aggregation[0]?.distinctSendersCount || 0;
+  }
+
+  async findDistinctSendersBatchBefore(
+    snapTimestamp = new Date().getTime(),
+    batchNumber = 1,
+    batchSize = 1000,
+  ): Promise<string[]> {
+    const skipNumber = (batchNumber - 1) * batchSize;
+
+    const distinctSenders = await this.obligationModel
+      .aggregate([
+        {
+          $match: {
+            timestampMs: { $lt: snapTimestamp.toString() },
+          },
+        },
+        {
+          $group: {
+            _id: '$sender',
+          },
+        },
+        {
+          $skip: skipNumber,
+        },
+        {
+          $limit: batchSize,
+        },
+      ])
+      .exec();
+
+    return distinctSenders.map((doc) => doc._id);
   }
 }

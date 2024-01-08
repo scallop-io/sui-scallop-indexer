@@ -40,4 +40,30 @@ export class WithdrawService {
       },
     );
   }
+
+  async findByObligationIdAt(
+    obligationId: string,
+    snapTimestamp = new Date().getTime(),
+  ): Promise<Withdraw[]> {
+    return this.withdrawModel
+      .find({
+        obligation_id: obligationId,
+        timestampMs: { $lt: snapTimestamp },
+      })
+      .sort({ timestampMs: 1 })
+      .exec();
+  }
+
+  async findByObligationIdBefore(
+    obligationId: string,
+    snapTimestamp = new Date().getTime(),
+  ): Promise<Withdraw[]> {
+    return this.withdrawModel
+      .find({
+        obligation_id: obligationId,
+        timestampMs: { $lt: snapTimestamp },
+      })
+      .sort({ timestampMs: 1 })
+      .exec();
+  }
 }

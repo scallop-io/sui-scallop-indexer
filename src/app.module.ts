@@ -19,6 +19,7 @@ import { RedeemModule } from './redeem/redeem.module';
 import { SupplyModule } from './supply/supply.module';
 import { SnapshotModule } from './snapshot/snapshot.module';
 import { SnapbatchModule } from './snapbatch/snapbatch.module';
+import { SnappriceModule } from './snapprice/snapprice.module';
 
 dotenv.config();
 
@@ -47,6 +48,7 @@ dotenv.config();
     SupplyModule,
     SnapshotModule,
     SnapbatchModule,
+    SnappriceModule,
   ],
   providers: [AppService],
 })

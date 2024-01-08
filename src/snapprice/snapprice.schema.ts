@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
-export type SnapshotDocument = Snapshot & Document;
+export type SnappriceDocument = Snapprice & Document;
 
 @Schema({
   versionKey: 'version',
@@ -14,27 +14,24 @@ export type SnapshotDocument = Snapshot & Document;
   toObject: { virtuals: true },
   timestamps: true,
 })
-export class Snapshot {
+export class Snapprice {
   @Prop({ required: true, index: true, default: '' })
   snapshotDay?: string;
 
   @Prop({ required: true, index: true })
-  sender?: string;
+  coinType?: string;
+
+  @Prop({ required: true, index: true })
+  coinSymbol?: string;
 
   @Prop({ index: true, default: 0 })
-  supplyValue?: number;
+  coinPrice?: number;
 
   @Prop({ index: true, default: 0 })
-  borrowValue?: number;
-
-  @Prop({ index: true, default: 0 })
-  collateralValue?: number;
-
-  @Prop({ index: true, default: 0 })
-  tvl?: number;
+  coinDecimal?: number;
 }
 
-export const SnapshotSchema = SchemaFactory.createForClass(Snapshot);
-SnapshotSchema.virtual('id').get(function () {
+export const SnappriceSchema = SchemaFactory.createForClass(Snapprice);
+SnappriceSchema.virtual('id').get(function () {
   return this._id.toHexString();
 });

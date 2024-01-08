@@ -19,10 +19,10 @@ export class Snapbatch {
   batch?: number;
 
   @Prop({ index: true, default: 0 })
-  shapbatchedAt?: Date;
+  snapbatchedAt?: Date;
 
   @Prop({ index: true, default: 0 })
-  shapbatchPoint?: number;
+  snapbatchPoint?: number;
 
   @Prop({ required: true, index: true })
   sender?: string;
