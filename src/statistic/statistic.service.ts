@@ -17,6 +17,7 @@ import { DepositService } from 'src/deposit/deposit.service';
 import { WithdrawService } from 'src/withdraw/withdraw.service';
 import { BorrowService } from 'src/borrow/borrow.service';
 import { RepayService } from 'src/repay/repay.service';
+import { SnappriceService } from 'src/snapprice/snapprice.service';
 
 @Injectable()
 export class StatisticService {
@@ -49,6 +50,9 @@ export class StatisticService {
 
   @Inject(SnapshotService)
   private readonly _snapshotService: SnapshotService;
+
+  @Inject(SnappriceService)
+  private readonly _snappriceService: SnappriceService;
 
   @Inject(SnapbatchService)
   private readonly _snapbatchService: SnapbatchService;
@@ -1977,6 +1981,66 @@ export class StatisticService {
     return `${year}-${month}-${day}`;
   }
 
+  async isSnapshoted(sender: string): Promise<boolean> {
+    const snapshots = await this._snapshotService.findBySender(sender);
+    if (snapshots.length > 0) {
+      return true;
+    }
+    return false;
+  }
+
+  async phase2SnapshotObligationsBetween(
+    snapStartAt = new Date(),
+    snapEndAt = new Date(),
+  ): Promise<void> {
+    try {
+      const snapEndTSms = snapEndAt.getTime();
+      const startTime = new Date().getTime();
+
+      console.log('[p2Snapshot-Obligations]: Getting uniqueSortedSenders ....');
+      const uniqueSortedSenders =
+        await this._obligationService.findUniqueSortSendersByTimestampMsBefore(
+          snapEndTSms,
+        );
+
+      let count = 0;
+      let senderStartTime = new Date().getTime();
+      let senderEndTime = new Date().getTime();
+      for (const sender of uniqueSortedSenders) {
+        senderStartTime = new Date().getTime();
+        count += 1;
+
+        if (!(await this.isSnapshoted(sender))) {
+          const savedSnapshots = await this.phase2SnapshotSenderBetween(
+            sender,
+            snapStartAt,
+            snapEndAt,
+          );
+
+          senderEndTime = new Date().getTime();
+          const senderExecTime = (senderEndTime - senderStartTime) / 1000;
+
+          console.log(
+            `[p2Snapshot-Obligations]: (${count}/${uniqueSortedSenders.length})], ${sender} , snapshots<${savedSnapshots.length}> , <${senderExecTime}> sec.`,
+          );
+        } else {
+          console.log(
+            `[p2Snapshot-Obligations]: (${count}/${uniqueSortedSenders.length})]: Skip ${sender} due to already snapshoted`,
+          );
+        }
+      }
+      const endTime = new Date().getTime();
+      const batchExecTime = (endTime - startTime) / 1000;
+      console.log(
+        `[p2Snapshot-Obligations]: <${uniqueSortedSenders.length}>, <${batchExecTime}> sec.`,
+      );
+    } catch (e) {
+      console.error(
+        `Error caught while phase2SnapshotObligationsBetween() ${e}`,
+      );
+    }
+  }
+
   async phase2SnapshotBetween(): Promise<void> {
     const snapStartAt = process.env.SNAPSHOT_START_AT
       ? new Date(process.env.SNAPSHOT_START_AT)
@@ -1996,78 +2060,21 @@ export class StatisticService {
       }>, To<${endNextDate.toISOString()}>(${snapEndTSms})`,
     );
 
+    // Get all history coin price map
+    this._dailyCoinPriceMap =
+      await this._snappriceService.getDailyCoinPriceMapBetween(
+        snapStartAt,
+        snapEndAt,
+      );
+    // console.log(this._dailyCoinPriceMap);
+
     // const sender =
     //   '0xe55a1b73a9fc9dfc88805846ba33d5576ba2953fcf6ca465c2ef3af2cc73e4ba';
     // // const sender =
-    // //   '0xc9ac35f4be23e6fd5f49507c100c74990c0009773c7099b979b4f909c059979b';
-    // // // const sender =
-    // // //   '0xbaa0e9e901ad8bbb523edc0b13182cc3a7cd57cb8fcc052920f1c2830d3c717f';
-    // // // const snapshotAt = process.env.SNAPSHOT_AT
-    // // //   ? new Date(process.env.SNAPSHOT_AT)
-    // // //   : new Date(this.getFormatDateString());
-    // // // await this._statisticService.phase2SnapshotSenderAt(sender, snapshotAt);
+    //   '0xbaa0e9e901ad8bbb523edc0b13182cc3a7cd57cb8fcc052920f1c2830d3c717f';
 
     // await this.phase2SnapshotSenderBetween(sender, snapStartAt, snapEndAt);
-
-    // Get all history coin price map
-    const dayPriceMap = await this.getDailyCoinPriceMapBetween(
-      snapStartAt,
-      snapEndAt,
-    );
-    console.log(dayPriceMap);
-
-    // get all senders batch by batch
-    const batchLog = Number(process.env.SNAPSHOT_BATCH_LOG) || 1;
-    const isShowBatchLog = batchLog === 1 ? true : false;
-    const batchSize = Number(process.env.SNAPSHOT_BATCH_SIZE) || 10;
-    let batchNumber = Number(process.env.SNAPSHOT_BATCH_START) || 1;
-
-    let totalOblSendersCount = 0;
-    let batchStartTime;
-    let batchEndTime;
-    const startTime = new Date().getTime();
-    while (true) {
-      batchStartTime = new Date().getTime();
-      const batchSenders =
-        await this._obligationService.findDistinctSendersBatchBefore(
-          snapEndTSms,
-          batchNumber,
-          batchSize,
-        );
-      totalOblSendersCount += batchSenders.length;
-
-      if (batchSenders.length === 0) {
-        break;
-      }
-
-      let batchCount = 0;
-      for (const sender of batchSenders) {
-        batchCount += 1;
-        const savedSnapshots = await this.phase2SnapshotSenderBetween(
-          sender,
-          snapStartAt,
-          snapEndAt,
-        );
-        if (isShowBatchLog) {
-          console.log(
-            `[p2Snapshot-Obligations]: Batch[${batchNumber}](${batchCount}/${batchSenders.length})]: <${sender}>, snapshots<${savedSnapshots.length}> `,
-          );
-        }
-      }
-      batchEndTime = new Date().getTime();
-      const batchExecTime = (batchEndTime - batchStartTime) / 1000;
-      console.log(
-        `[p2Snapshot-Obligations]: Batch[${batchNumber}]<${batchSenders.length}>, <${batchExecTime}> sec.`,
-      );
-
-      batchNumber += 1;
-    } //end of while
-
-    const endTime = new Date().getTime();
-    const execTime = (endTime - startTime) / 1000;
-    console.log(
-      `[p2Snapshot-Obligations]: Total<${totalOblSendersCount}>  , <${execTime}> sec.`,
-    );
+    await this.phase2SnapshotObligationsBetween(snapStartAt, snapEndAt);
   }
 
   async phase2SnapshotSenderBetween(
@@ -2077,23 +2084,9 @@ export class StatisticService {
   ): Promise<Snapshot[]> {
     const savedSnapshots = [];
     try {
-      // const snapStartTSms = snapStartAt.getTime();
-      // const snapEndTSms = snapEndAt.getTime();
       const endNextDate = new Date(snapEndAt);
       endNextDate.setDate(snapEndAt.getDate() + 1);
       const snapEndTSms = endNextDate.getTime();
-      // console.log(
-      //   `[Snapshot]-From<${
-      //     snapStartAt.toISOString().split('T')[0]
-      //   }>, To<${endNextDate.toISOString()}>(${snapEndTSms})`,
-      // );
-
-      // Get all history coin price map
-      const dayPriceMap = await this.getDailyCoinPriceMapBetween(
-        snapStartAt,
-        snapEndAt,
-      );
-      // console.log(dayPriceMap);
 
       let startTime = new Date().getTime();
       let endTime = new Date().getTime();
@@ -2151,7 +2144,7 @@ export class StatisticService {
 
       endTime = new Date().getTime();
       execTime = (endTime - startTime) / 1000;
-      console.log(`[p2Snapshot]- Get <${sender}> txs done, <${execTime}> sec.`);
+      // console.log(`[p2Snapshot]- Get <${sender}> txs done, <${execTime}> sec.`);
 
       let currentDate = snapStartAt;
       while (currentDate <= snapEndAt) {
@@ -2174,7 +2167,8 @@ export class StatisticService {
             if (supplyBalanceMap.has(coinName)) {
               balance = supplyBalanceMap.get(coinName);
             }
-            supplyBalanceMap.set(coinName, balance + coinAmount);
+            const caculatedBalance = Math.max(0, balance + coinAmount);
+            supplyBalanceMap.set(coinName, caculatedBalance);
           }
         }
         for (let i = 0; i < redeemList.length; i++) {
@@ -2186,7 +2180,8 @@ export class StatisticService {
             if (supplyBalanceMap.has(coinName)) {
               balance = supplyBalanceMap.get(coinName);
             }
-            supplyBalanceMap.set(coinName, balance - coinAmount);
+            const caculatedBalance = Math.max(0, balance - coinAmount);
+            supplyBalanceMap.set(coinName, caculatedBalance);
           }
         }
         // console.log(`[getSenderSupplyAssets]- balanceMap: ${balanceMap}`);
@@ -2216,7 +2211,8 @@ export class StatisticService {
             if (collateralBalanceMap.has(coinName)) {
               balance = collateralBalanceMap.get(coinName);
             }
-            collateralBalanceMap.set(coinName, balance + coinAmount);
+            const caculatedBalance = Math.max(0, balance + coinAmount);
+            collateralBalanceMap.set(coinName, caculatedBalance);
           }
         }
         for (let i = 0; i < withdrawList.length; i++) {
@@ -2228,7 +2224,8 @@ export class StatisticService {
             if (collateralBalanceMap.has(coinName)) {
               balance = collateralBalanceMap.get(coinName);
             }
-            collateralBalanceMap.set(coinName, balance - coinAmount);
+            const caculatedBalance = Math.max(0, balance - coinAmount);
+            collateralBalanceMap.set(coinName, caculatedBalance);
           }
         }
 
@@ -2256,7 +2253,8 @@ export class StatisticService {
             if (debtBalanceMap.has(coinName)) {
               balance = debtBalanceMap.get(coinName);
             }
-            debtBalanceMap.set(coinName, balance + coinAmount);
+            const caculatedBalance = Math.max(0, balance + coinAmount);
+            debtBalanceMap.set(coinName, caculatedBalance);
           }
         }
         for (let i = 0; i < repayList.length; i++) {
@@ -2268,7 +2266,8 @@ export class StatisticService {
             if (debtBalanceMap.has(coinName)) {
               balance = debtBalanceMap.get(coinName);
             }
-            debtBalanceMap.set(coinName, balance - coinAmount);
+            const caculatedBalance = Math.max(0, balance - coinAmount);
+            debtBalanceMap.set(coinName, caculatedBalance);
           }
         }
 
@@ -2285,11 +2284,12 @@ export class StatisticService {
           }
         }
 
+        const snapshotDay = currentDate.toISOString().split('T')[0];
+
         // calculate supply value of sender
         let senderSupplyValue = 0;
-        const coinPriceMap = dayPriceMap.get(
-          currentDate.toISOString().split('T')[0],
-        );
+        // const coinPriceMap = dayPriceMap.get(csnapshotDay);
+        const coinPriceMap = this._dailyCoinPriceMap.get(snapshotDay);
         for (const asset of supplyAssets) {
           const coinPrice = coinPriceMap.get(asset.coin) || 0;
           const multiple = this.getDecimalMultiplier(asset.coin);
@@ -2316,10 +2316,20 @@ export class StatisticService {
           senderBorrowValue += coinValue;
         }
 
-        const senderTvl =
-          senderSupplyValue + senderCollateralValue - senderBorrowValue;
+        const senderTvl = Math.max(
+          0,
+          senderSupplyValue + senderCollateralValue - senderBorrowValue,
+        );
 
-        if (senderSupplyValue > 0 || senderBorrowValue > 0) {
+        const supplyValueThreshold =
+          Number(process.env.SNAPSHOT_SUPPLY_VALUE_THRESHOLD) || 10;
+        const borrowValueThreshold =
+          Number(process.env.SNAPSHOT_BORROW_VALUE_THRESHOLD) || 10;
+
+        if (
+          senderSupplyValue > supplyValueThreshold ||
+          senderBorrowValue > borrowValueThreshold
+        ) {
           const snapshot = {
             sender: sender,
             supplyValue: senderSupplyValue,
@@ -2328,7 +2338,7 @@ export class StatisticService {
             tvl: senderTvl,
 
             // snapshotedAt: snapshotedAt,
-            snapshotDay: snapshotedAt.toISOString().split('T')[0],
+            snapshotDay: snapshotDay,
           };
 
           const savedSnapshot =
@@ -2339,19 +2349,17 @@ export class StatisticService {
             );
           savedSnapshots.push(savedSnapshot);
 
-          endTime = new Date().getTime();
-          execTime = (endTime - startTime) / 1000;
-          console.log(
-            `[p2Snapshot][${savedSnapshot.snapshotDay}]:sender<${savedSnapshot.sender}>, borrowValue<${savedSnapshot.borrowValue}>, supplyValue<${savedSnapshot.supplyValue}, <${execTime}> sec. `,
-          );
+          // endTime = new Date().getTime();
+          // execTime = (endTime - startTime) / 1000;
+          // // console.log(
+          //   `[p2Snapshot][${snapshotDay}]:sender<${sender}>, borrowValue<${savedSnapshot.borrowValue}>, supplyValue<${savedSnapshot.supplyValue}, <${execTime}> sec. `,
+          // );
         } else {
-          endTime = new Date().getTime();
-          execTime = (endTime - startTime) / 1000;
-          console.log(
-            `[p2Snapshot][${
-              snapshotedAt.toISOString().split('T')[0]
-            }]:sender<${sender}>, No borrowValue & supplyValue, <${execTime}> sec. `,
-          );
+          // endTime = new Date().getTime();
+          // execTime = (endTime - startTime) / 1000;
+          // console.log(
+          //   `[p2Snapshot][${snapshotDay}]:sender<${sender}>, No borrowValue & supplyValue, <${execTime}> sec. `,
+          // );
         }
 
         // console.log(snapshot);

@@ -154,6 +154,23 @@ export class ObligationService {
       .exec();
   }
 
+  async findUniqueSortSendersByTimestampMsBefore(
+    snapTimestamp = new Date().getTime(),
+  ): Promise<string[]> {
+    // Execute the query and await the result
+    const obligations = await this.obligationModel
+      .find({ timestampMs: { $lt: snapTimestamp } })
+      .sort({ timestampMs: -1 })
+      .exec();
+
+    // Use a Set to get distinct sender values and convert back to array
+    const distinctSenders = Array.from(
+      new Set(obligations.map((doc) => doc.sender)),
+    );
+
+    return distinctSenders;
+  }
+
   async findDistinctSenders(): Promise<string[]> {
     const distinctSenders = await this.obligationModel
       .distinct('sender')

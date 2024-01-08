@@ -13,6 +13,7 @@ import { DepositModule } from 'src/deposit/deposit.module';
 import { WithdrawModule } from 'src/withdraw/withdraw.module';
 import { BorrowModule } from 'src/borrow/borrow.module';
 import { RepayModule } from 'src/repay/repay.module';
+import { SnappriceModule } from 'src/snapprice/snapprice.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { RepayModule } from 'src/repay/repay.module';
     BorrowModule,
     RepayModule,
     SnapshotModule,
+    SnappriceModule,
     SnapbatchModule,
   ],
   providers: [StatisticService],

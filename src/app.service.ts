@@ -665,8 +665,8 @@ export class AppService {
     // await this._statisticService.recalculateSnapbatchValues();
     // await this._statisticService.phase2Snapbatch();
 
-    // await this._statisticService.phase2SnapshotBetween();
-    await this._snappriceService.snapshotCoinPriceBetween();
+    await this._statisticService.phase2SnapshotBetween();
+    // await this._snappriceService.snapshotCoinPriceBetween();
 
     const end = new Date().getTime();
     const execTime = (end - start) / 1000;

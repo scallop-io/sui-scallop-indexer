@@ -25,7 +25,65 @@ export class SnappriceService {
   }
 
   async findByDate(snapshotDay: string): Promise<Snapprice[]> {
-    return this.snappriceModel.find({ snapshotDay: snapshotDay }).exec();
+    let snapprices = await this.snappriceModel
+      .find({ snapshotDay: snapshotDay })
+      .exec();
+    if (snapprices.length === 0) {
+      await this.getDailyCoinPriceMapBetween(
+        new Date(snapshotDay),
+        new Date(snapshotDay),
+      );
+      snapprices = await this.snappriceModel
+        .find({ snapshotDay: snapshotDay })
+        .exec();
+    }
+    return snapprices;
+  }
+
+  async getDailyCoinPriceMapBetween(
+    snapStartAt = new Date(),
+    snapEndAt = new Date(),
+  ): Promise<Map<string, Map<string, number>>> {
+    const dayPriceMap = new Map<string, Map<string, number>>();
+
+    try {
+      let currentDate = snapStartAt;
+      let startTime = new Date().getTime();
+      let endTime = new Date().getTime();
+      while (currentDate <= snapEndAt) {
+        const snapshotDay = currentDate.toISOString().split('T')[0];
+        startTime = new Date().getTime();
+        const snapshotDayPrices = await this.findByDate(snapshotDay);
+        const priceMap = new Map<string, number>();
+        for (let i = 0; i < snapshotDayPrices.length; i++) {
+          const coinType = snapshotDayPrices[i].coinType;
+          const coinPrice = snapshotDayPrices[i].coinPrice;
+          // const coinSymbol = snapshotDayPrices[i].coinSymbol;
+          // const coinDecimal = snapshotDayPrices[i].coinDecimal;
+          priceMap.set(coinType, coinPrice);
+        }
+        dayPriceMap.set(snapshotDay, priceMap);
+
+        // console.log(dayPriceMap);
+        endTime = new Date().getTime();
+        const execTime = (endTime - startTime) / 1000;
+        console.log(
+          `[getDailyCoinPriceMapBetween]-Getting <${snapshotDay}> price map done, <${execTime}> sec.`,
+        );
+
+        // Move to the next day
+        const nextDate = new Date(currentDate);
+        nextDate.setDate(currentDate.getDate() + 1);
+        currentDate = nextDate;
+        if (currentDate > snapEndAt) {
+          break;
+        }
+      } // end of while
+    } catch (error) {
+      console.error('Error caught while getDailyCoinPriceMapBetween() ', error);
+    }
+
+    return dayPriceMap;
   }
 
   async findOneBySenderAndUpdate(
