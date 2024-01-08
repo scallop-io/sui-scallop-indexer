@@ -2003,12 +2003,12 @@ export class StatisticService {
           snapEndTSms,
         );
 
-      let count = 0;
+      let senderCount = 0;
       let senderStartTime = new Date().getTime();
       let senderEndTime = new Date().getTime();
       for (const sender of uniqueSortedSenders) {
         senderStartTime = new Date().getTime();
-        count += 1;
+        senderCount += 1;
 
         if (!(await this.isSnapshoted(sender))) {
           const savedSnapshots = await this.phase2SnapshotSenderBetween(
@@ -2021,11 +2021,11 @@ export class StatisticService {
           const senderExecTime = (senderEndTime - senderStartTime) / 1000;
 
           console.log(
-            `[p2Snapshot-Obligations]: (${count}/${uniqueSortedSenders.length})], ${sender} , snapshots<${savedSnapshots.length}> , <${senderExecTime}> sec.`,
+            `[p2Snapshot-Obligations]: (${senderCount}/${uniqueSortedSenders.length})], ${sender} , snapshots<${savedSnapshots.length}> , <${senderExecTime}> sec.`,
           );
         } else {
           console.log(
-            `[p2Snapshot-Obligations]: (${count}/${uniqueSortedSenders.length})]: Skip ${sender} due to already snapshoted`,
+            `[p2Snapshot-Obligations]: (${senderCount}/${uniqueSortedSenders.length})]: Skip ${sender} due to already snapshoted`,
           );
         }
       }
@@ -2038,6 +2038,86 @@ export class StatisticService {
       console.error(
         `Error caught while phase2SnapshotObligationsBetween() ${e}`,
       );
+    }
+  }
+
+  async phase2SnapshotSuppliesBetween(
+    snapStartAt = new Date(),
+    snapEndAt = new Date(),
+  ): Promise<void> {
+    try {
+      // const snapEndTSms = snapEndAt.getTime();
+      const startTime = new Date().getTime();
+
+      // get all senders page by page
+      const pageSize = Number(process.env.SNAPSHOT_PAGE_SIZE) || 1000;
+      const pageStart = Number(process.env.SNAPSHOT_PAGE_START) || 1;
+      const pageEnd = Number(process.env.SNAPSHOT_PAGE_END) || 9999;
+
+      let pageIdx = pageStart;
+      let totalSupplyCount = 0;
+      let pageStartTime;
+      let pageEndTime;
+      while (true) {
+        pageStartTime = new Date().getTime();
+
+        const pageSupplies =
+          await this._supplyService.findSortPageByTimestampMsBefore(
+            snapEndAt,
+            pageSize,
+            pageIdx,
+          );
+        totalSupplyCount += pageSupplies.length;
+
+        // if there are no more supplies, break
+        if (pageSupplies.length === 0) {
+          break;
+        }
+
+        let senderCount = 0;
+        let senderStartTime = new Date().getTime();
+        let senderEndTime = new Date().getTime();
+        for (const supply of pageSupplies) {
+          senderCount += 1;
+
+          if (!(await this.isSnapshoted(supply.sender))) {
+            senderStartTime = new Date().getTime();
+            const savedSnapshots = await this.phase2SnapshotSenderBetween(
+              supply.sender,
+              snapStartAt,
+              snapEndAt,
+            );
+
+            senderEndTime = new Date().getTime();
+            const senderExecTime = (senderEndTime - senderStartTime) / 1000;
+            console.log(
+              `[p2Snapshot-Supplies]: Page[${pageIdx}](${senderCount}/${pageSupplies.length})]: ${supply.sender} , snapshots<${savedSnapshots.length}> , <${senderExecTime}> sec.`,
+            );
+          } else {
+            console.log(
+              `[p2Snapshot-Supplies]: Page[${pageIdx}](${senderCount}/${pageSupplies.length})]: Skip ${supply.sender} due to already snapshoted`,
+            );
+          }
+        }
+        pageEndTime = new Date().getTime();
+        const pageExecTime = (pageEndTime - pageStartTime) / 1000;
+        console.log(
+          `[p2Snapshot-Supplies]: Page[${pageIdx}](${senderCount}/${pageSupplies.length})]: , <${pageExecTime}> sec. `,
+        );
+
+        pageIdx += 1;
+        if (pageIdx > pageEnd) {
+          break;
+        }
+      } //end of while
+
+      const endTime = new Date().getTime();
+      const execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[p2Snapshot-Supplies]: Total<${totalSupplyCount}>  , <${execTime}> sec.`,
+      );
+    } catch (e) {
+      console.error(`Error caught while phase2SnapshotSuppliesBetween() ${e}`);
     }
   }
 
@@ -2068,13 +2148,20 @@ export class StatisticService {
       );
     // console.log(this._dailyCoinPriceMap);
 
+    const snapObligationsFlag = Number(process.env.SNAPSHOT_OBLIGATIONS) || 0;
+    const isSnapbatchObligations = snapObligationsFlag > 0 ? true : false;
+
+    if (isSnapbatchObligations) {
+      await this.phase2SnapshotObligationsBetween(snapStartAt, snapEndAt);
+    }
+    await this.phase2SnapshotSuppliesBetween(snapStartAt, snapEndAt);
+
     // const sender =
     //   '0xe55a1b73a9fc9dfc88805846ba33d5576ba2953fcf6ca465c2ef3af2cc73e4ba';
     // // const sender =
     //   '0xbaa0e9e901ad8bbb523edc0b13182cc3a7cd57cb8fcc052920f1c2830d3c717f';
 
     // await this.phase2SnapshotSenderBetween(sender, snapStartAt, snapEndAt);
-    await this.phase2SnapshotObligationsBetween(snapStartAt, snapEndAt);
   }
 
   async phase2SnapshotSenderBetween(
