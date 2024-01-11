@@ -684,10 +684,11 @@ export class AppService {
       );
       const snapshotIntervalMinutes =
         Number(process.env.SNAPSHOT_INTERVAL_MINUTES) || 30;
-      await this.delay(snapshotIntervalMinutes * 60 * 1000);
+
       console.log(
         `[loopSnapshotBack][${new Date().toISOString()}]==== snapshotBack : wait for <${snapshotIntervalMinutes}> minutes ====`,
       );
+      await this.delay(snapshotIntervalMinutes * 60 * 1000);
     } //end of while
   }
 }

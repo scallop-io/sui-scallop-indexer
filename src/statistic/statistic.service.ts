@@ -2119,15 +2119,27 @@ export class StatisticService {
     const today0am = new Date(today.toISOString().split('T')[0]);
     const previousDay = new Date(today0am);
     previousDay.setDate(today0am.getDate() - 1);
-
     const snapEndTSms = today0am.getTime();
-    const snapEndAt = new Date(previousDay);
+
     let snapStartAt: Date;
-    while (!(await this.isThisDaySnapshoted(previousDay))) {
-      snapStartAt = new Date(previousDay);
-      // move to the previous day
-      previousDay.setDate(snapStartAt.getDate() - 1);
-    } // end of while
+    let snapEndAt: Date;
+    if (process.env.SNAPSHOT_START_AT) {
+      // get snapshot dates manually from env
+      snapStartAt = new Date(process.env.SNAPSHOT_START_AT);
+
+      snapEndAt = process.env.SNAPSHOT_END_AT
+        ? new Date(process.env.SNAPSHOT_END_AT)
+        : today0am;
+    } else {
+      // get snapshot date automatically
+      snapEndAt = new Date(previousDay);
+
+      while (!(await this.isThisDaySnapshoted(previousDay))) {
+        snapStartAt = new Date(previousDay);
+        // move to the previous day
+        previousDay.setDate(snapStartAt.getDate() - 1);
+      } // end of while
+    }
 
     if (snapStartAt) {
       console.log(
