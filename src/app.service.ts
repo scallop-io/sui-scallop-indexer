@@ -657,19 +657,37 @@ export class AppService {
     } //end while
   }
 
-  async takeSnapshot(): Promise<void> {
-    const start = new Date().getTime();
+  async delay(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async loopSnapshotBack(): Promise<void> {
+    // const start = new Date().getTime();
 
     // await this._statisticService.snapshotAll();
     // await this._statisticService.phase1Snapbatch();
     // await this._statisticService.recalculateSnapbatchValues();
     // await this._statisticService.phase2Snapbatch();
 
-    await this._statisticService.phase2SnapshotBetween();
     // await this._snappriceService.snapshotCoinPriceBetween();
+    // await this._statisticService.phase2SnapshotBetween();
 
-    const end = new Date().getTime();
-    const execTime = (end - start) / 1000;
-    console.log(`[<${new Date()}>]==== takeSnapshot : <${execTime}> secs ====`);
+    while (true) {
+      const start = new Date().getTime();
+
+      await this._statisticService.snapshotBack();
+
+      const end = new Date().getTime();
+      const execTime = (end - start) / 1000;
+      console.log(
+        `[loopSnapshotBack][${new Date().toISOString()}]==== snapshotBack : <${execTime}> secs ====`,
+      );
+      const snapshotIntervalMinutes =
+        Number(process.env.SNAPSHOT_INTERVAL_MINUTES) || 30;
+      await this.delay(snapshotIntervalMinutes * 60 * 1000);
+      console.log(
+        `[loopSnapshotBack][${new Date().toISOString()}]==== snapshotBack : wait for <${snapshotIntervalMinutes}> minutes ====`,
+      );
+    } //end of while
   }
 }

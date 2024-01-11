@@ -28,6 +28,33 @@ export class SnapshotService {
     return this.snapshotModel.find({ sender: sender }).exec();
   }
 
+  async findBySenderAt(
+    sender: string,
+    snapshotDay = new Date(),
+  ): Promise<Snapshot[]> {
+    return this.snapshotModel
+      .find({
+        sender: sender,
+        snapshotDay: snapshotDay.toISOString().split('T')[0],
+      })
+      .exec();
+  }
+
+  async findBySnapshotDay(snapshotDay = new Date()): Promise<Snapshot[]> {
+    const snapshots = await this.snapshotModel
+      .find({
+        snapshotDay: snapshotDay.toISOString().split('T')[0],
+      })
+      .exec();
+    return snapshots.length > 0 ? snapshots : [];
+  }
+
+  async findDistinctSenders(): Promise<string[]> {
+    const distinctSenders = await this.snapshotModel.distinct('sender').exec();
+
+    return distinctSenders;
+  }
+
   async findOneBySenderAndUpdate(
     sender: string,
     snapshot: Snapshot,

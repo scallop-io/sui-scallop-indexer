@@ -8,7 +8,7 @@ async function bootstrap() {
   const app = await NestFactory.createApplicationContext(AppModule);
   const appService = app.get(AppService);
   if (SNAPSHOT_MODE !== 0) {
-    appService.takeSnapshot();
+    appService.loopSnapshotBack();
   } else {
     appService.loopQueryEvents();
   }

@@ -1904,89 +1904,81 @@ export class StatisticService {
   // Phase 2----------------------------------------------------------------
   private _dailyCoinPriceMap = new Map<string, Map<string, number>>();
 
-  async getDailyCoinPriceMapBetween(
-    snapStartAt = new Date(),
-    snapEndAt = new Date(),
-  ): Promise<Map<string, Map<string, number>>> {
-    // const dayPriceMap = new Map<string, Map<string, number>>();
-    if (this._dailyCoinPriceMap.size > 0) {
-      return this._dailyCoinPriceMap;
-    }
-    try {
-      let currentDate = snapStartAt;
-      let startTime = new Date().getTime();
-      let endTime = new Date().getTime();
-      while (currentDate <= snapEndAt) {
-        startTime = new Date().getTime();
-        console.log(
-          `Getting <${currentDate.toISOString().split('T')[0]}> price map ...`,
-        );
-        const priceMap = new Map<string, number>();
-        for (const coinType of this.COIN_DECIMALS.keys()) {
-          const coinSymbol = this.getCoinSymbol(coinType);
-          let coinPrice = 0;
-          // LSD Tokens (*SUI) use SUI price temporarily
-          if (coinSymbol.length > 3 && coinSymbol.endsWith('SUI')) {
-            coinPrice =
-              priceMap.get(
-                '0000000000000000000000000000000000000000000000000000000000000002::sui::SUI',
-              ) || 0;
-          } else {
-            coinPrice = await this.getHistoryCoinPriceFromCoinGecko(
-              currentDate,
-              coinSymbol,
-            );
-            // delay 12.5 sec to avoid rate limit (5 calls per minute)
-            await this.delay(12500);
-          }
-
-          // console.log(`[CoinPrice]: ${coinSymbol} <${coinPrice}>`);
-          priceMap.set(coinType, coinPrice);
-        }
-
-        this._dailyCoinPriceMap.set(
-          currentDate.toISOString().split('T')[0],
-          priceMap,
-        );
-        // console.log(dayPriceMap);
-        endTime = new Date().getTime();
-        const execTime = (endTime - startTime) / 1000;
-        console.log(
-          `Getting <${
-            currentDate.toISOString().split('T')[0]
-          }> price map done, <${execTime}> sec.`,
-        );
-
-        // Move to the next day
-        const nextDate = new Date(currentDate);
-        nextDate.setDate(currentDate.getDate() + 1);
-        currentDate = nextDate;
-        if (currentDate > snapEndAt) {
-          break;
-        }
-      } // end of while
-    } catch (error) {
-      console.error('Error caught while getDailyCoinPriceMapBetween() ', error);
-    }
-
-    return this._dailyCoinPriceMap;
-  }
-
-  // convert to yyyy-mm-dd format
-  getFormatDateString(date: Date = new Date()): string {
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0'); // +1 because months are 0-indexed
-    const year = date.getFullYear();
-
-    return `${year}-${month}-${day}`;
-  }
-
   async isSnapshoted(sender: string): Promise<boolean> {
     const snapshots = await this._snapshotService.findBySender(sender);
     if (snapshots.length > 0) {
       return true;
     }
     return false;
+  }
+
+  async isSenderSnapshotedAt(
+    sender: string,
+    snapshotAt = new Date(),
+  ): Promise<boolean> {
+    const snapshots = await this._snapshotService.findBySenderAt(
+      sender,
+      snapshotAt,
+    );
+    if (snapshots.length > 0) {
+      return true;
+    }
+    return false;
+  }
+
+  async isThisDaySnapshoted(snapshotAt = new Date()): Promise<boolean> {
+    const snapshots = await this._snapshotService.findBySnapshotDay(snapshotAt);
+
+    return snapshots.length > 0 ? true : false;
+  }
+
+  async phase2SnapshotUniqueActiveSenders(
+    snapStartAt = new Date(),
+    snapEndAt = new Date(),
+  ): Promise<void> {
+    try {
+      // const snapEndTSms = snapEndAt.getTime();
+      const startTime = new Date().getTime();
+
+      console.log('[p2Snapshot-ActiveSenders]: Getting uniqueSenders ....');
+      const uniqueSenders = await this._snapshotService.findDistinctSenders();
+
+      let senderCount = 0;
+      let senderStartTime = new Date().getTime();
+      let senderEndTime = new Date().getTime();
+      for (const sender of uniqueSenders) {
+        senderStartTime = new Date().getTime();
+        senderCount += 1;
+
+        if (!(await this.isSenderSnapshotedAt(sender, snapEndAt))) {
+          const savedSnapshots = await this.phase2SnapshotSenderBetween(
+            sender,
+            snapStartAt,
+            snapEndAt,
+          );
+
+          senderEndTime = new Date().getTime();
+          const senderExecTime = (senderEndTime - senderStartTime) / 1000;
+
+          console.log(
+            `[p2Snapshot-ActiveSenders]: (${senderCount}/${uniqueSenders.length})], ${sender} , snapshots<${savedSnapshots.length}> , <${senderExecTime}> sec.`,
+          );
+        } else {
+          console.log(
+            `[p2Snapshot-ActiveSenders]: (${senderCount}/${uniqueSenders.length})]: Skip ${sender} due to already snapshoted`,
+          );
+        }
+      }
+      const endTime = new Date().getTime();
+      const batchExecTime = (endTime - startTime) / 1000;
+      console.log(
+        `[p2Snapshot-ActiveSenders]: <${uniqueSenders.length}>, <${batchExecTime}> sec.`,
+      );
+    } catch (e) {
+      console.error(
+        `Error caught while phase2SnapshotUniqueActiveSenders() ${e}`,
+      );
+    }
   }
 
   async phase2SnapshotObligationsBetween(
@@ -2010,7 +2002,7 @@ export class StatisticService {
         senderStartTime = new Date().getTime();
         senderCount += 1;
 
-        if (!(await this.isSnapshoted(sender))) {
+        if (!(await this.isSenderSnapshotedAt(sender, snapEndAt))) {
           const savedSnapshots = await this.phase2SnapshotSenderBetween(
             sender,
             snapStartAt,
@@ -2080,7 +2072,7 @@ export class StatisticService {
         for (const supply of pageSupplies) {
           senderCount += 1;
 
-          if (!(await this.isSnapshoted(supply.sender))) {
+          if (!(await this.isSenderSnapshotedAt(supply.sender, snapEndAt))) {
             senderStartTime = new Date().getTime();
             const savedSnapshots = await this.phase2SnapshotSenderBetween(
               supply.sender,
@@ -2121,14 +2113,64 @@ export class StatisticService {
     }
   }
 
+  async snapshotBack(): Promise<void> {
+    // decide start date & end date
+    const today = new Date();
+    const today0am = new Date(today.toISOString().split('T')[0]);
+    const previousDay = new Date(today0am);
+    previousDay.setDate(today0am.getDate() - 1);
+
+    const snapEndTSms = today0am.getTime();
+    const snapEndAt = new Date(previousDay);
+    let snapStartAt: Date;
+    while (!(await this.isThisDaySnapshoted(previousDay))) {
+      snapStartAt = new Date(previousDay);
+      // move to the previous day
+      previousDay.setDate(snapStartAt.getDate() - 1);
+    } // end of while
+
+    if (snapStartAt) {
+      console.log(
+        `[p2Snapshot][${today.toISOString()}]: Snapshot from<${
+          snapStartAt.toISOString().split('T')[0]
+        }>, To<${today0am.toISOString()}>(${snapEndTSms})`,
+      );
+
+      // Get all history coin price map
+      this._dailyCoinPriceMap =
+        await this._snappriceService.getDailyCoinPriceMapBetween(
+          snapStartAt,
+          snapEndAt,
+        );
+      console.log(this._dailyCoinPriceMap);
+
+      const snapActiveSendersFlag =
+        Number(process.env.SNAPSHOT_ACTIVE_SENDERS) || 1;
+      const isSnapActiveSenders = snapActiveSendersFlag > 0 ? true : false;
+      if (isSnapActiveSenders) {
+        await this.phase2SnapshotUniqueActiveSenders(snapStartAt, snapEndAt);
+      }
+
+      const snapObligationsFlag = Number(process.env.SNAPSHOT_OBLIGATIONS) || 0;
+      const isSnapbatchObligations = snapObligationsFlag > 0 ? true : false;
+      if (isSnapbatchObligations) {
+        await this.phase2SnapshotObligationsBetween(snapStartAt, snapEndAt);
+      }
+      await this.phase2SnapshotSuppliesBetween(snapStartAt, snapEndAt);
+    } else {
+      console.log(`[p2Snapshot][${today.toISOString()}]: No snapshot to do.`);
+    }
+  }
+
   async phase2SnapshotBetween(): Promise<void> {
+    const today = new Date();
     const snapStartAt = process.env.SNAPSHOT_START_AT
       ? new Date(process.env.SNAPSHOT_START_AT)
-      : new Date(this.getFormatDateString());
+      : new Date(today.toISOString().split('T')[0]);
 
     const snapEndAt = process.env.SNAPSHOT_END_AT
       ? new Date(process.env.SNAPSHOT_END_AT)
-      : new Date(this.getFormatDateString());
+      : new Date(today.toISOString().split('T')[0]);
 
     const endNextDate = new Date(snapEndAt);
     endNextDate.setDate(snapEndAt.getDate() + 1);
@@ -2175,9 +2217,9 @@ export class StatisticService {
       endNextDate.setDate(snapEndAt.getDate() + 1);
       const snapEndTSms = endNextDate.getTime();
 
-      let startTime = new Date().getTime();
-      let endTime = new Date().getTime();
-      let execTime = 0;
+      // let startTime = new Date().getTime();
+      // let endTime = new Date().getTime();
+      // let execTime = 0;
 
       // Get all mint/redeem transactions of sender
       const mintList = await this._mintService.findBySenderBefore(
@@ -2229,15 +2271,14 @@ export class StatisticService {
         repayList.push(...oblRepayList);
       }
 
-      endTime = new Date().getTime();
-      execTime = (endTime - startTime) / 1000;
-      // console.log(`[p2Snapshot]- Get <${sender}> txs done, <${execTime}> sec.`);
+      // endTime = new Date().getTime();
+      // execTime = (endTime - startTime) / 1000;
+      // // console.log(`[p2Snapshot]- Get <${sender}> txs done, <${execTime}> sec.`);
 
       let currentDate = snapStartAt;
       while (currentDate <= snapEndAt) {
-        startTime = new Date().getTime();
-
-        const snapshotedAt = currentDate;
+        // startTime = new Date().getTime();
+        // const snapshotedAt = currentDate;
         // const snapTimestamp = currentDate.getTime();
         const nextDate = new Date(currentDate);
         nextDate.setDate(currentDate.getDate() + 1);

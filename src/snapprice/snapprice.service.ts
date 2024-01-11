@@ -25,18 +25,18 @@ export class SnappriceService {
   }
 
   async findByDate(snapshotDay: string): Promise<Snapprice[]> {
-    let snapprices = await this.snappriceModel
+    const snapprices = await this.snappriceModel
       .find({ snapshotDay: snapshotDay })
       .exec();
-    if (snapprices.length === 0) {
-      await this.getDailyCoinPriceMapBetween(
-        new Date(snapshotDay),
-        new Date(snapshotDay),
-      );
-      snapprices = await this.snappriceModel
-        .find({ snapshotDay: snapshotDay })
-        .exec();
-    }
+    // if (snapprices.length === 0) {
+    //   await this.getDailyCoinPriceMapBetween(
+    //     new Date(snapshotDay),
+    //     new Date(snapshotDay),
+    //   );
+    //   snapprices = await this.snappriceModel
+    //     .find({ snapshotDay: snapshotDay })
+    //     .exec();
+    // }
     return snapprices;
   }
 
@@ -52,6 +52,7 @@ export class SnappriceService {
       let endTime = new Date().getTime();
       while (currentDate <= snapEndAt) {
         const snapshotDay = currentDate.toISOString().split('T')[0];
+        console.log(`[SnapPrice]: Getting <${snapshotDay}>..`);
         startTime = new Date().getTime();
         const snapshotDayPrices = await this.findByDate(snapshotDay);
         const priceMap = new Map<string, number>();
@@ -62,13 +63,57 @@ export class SnappriceService {
           // const coinDecimal = snapshotDayPrices[i].coinDecimal;
           priceMap.set(coinType, coinPrice);
         }
+
+        // get from coingecko if not complete
+        if (snapshotDayPrices.length < this.COIN_GECKO_IDS.size) {
+          console.log(`[SnapPrice]: Getting from CoinGecko <${snapshotDay}>..`);
+          for (const coinType of this.COIN_DECIMALS.keys()) {
+            const coinSymbol = this.getCoinSymbol(coinType);
+            let coinPrice = 0;
+            // LSD Tokens (*SUI) use SUI price temporarily
+            if (coinSymbol.length > 3 && coinSymbol.endsWith('SUI')) {
+              coinPrice =
+                priceMap.get(
+                  '0000000000000000000000000000000000000000000000000000000000000002::sui::SUI',
+                ) || 0;
+            } else {
+              coinPrice = await this.getHistoryCoinPriceFromCoinGecko(
+                currentDate,
+                coinSymbol,
+              );
+              // delay 12.5 sec to avoid rate limit (5 calls per minute)
+              await this.delay(12500);
+            }
+
+            const snapprice = {
+              snapshotDay: snapshotDay,
+              coinType: coinType,
+              coinSymbol: coinSymbol,
+              coinPrice: coinPrice,
+              coinDecimal: this.COIN_DECIMALS.get(coinType) || 0,
+            };
+            // console.log(snapprice);
+            const savedSnapprice = await this.findOneByDateAndUpdate(
+              snapprice.snapshotDay,
+              coinType,
+              snapprice,
+            );
+            console.log(
+              `[SnapPrice]: save [${savedSnapprice.snapshotDay}], <${savedSnapprice.coinSymbol}> <${savedSnapprice.coinPrice}> from CoinGecko`,
+            );
+
+            // console.log(`[CoinPrice]: ${coinSymbol} <${coinPrice}>`);
+            priceMap.set(coinType, coinPrice);
+          }
+        }
+
         dayPriceMap.set(snapshotDay, priceMap);
 
         // console.log(dayPriceMap);
         endTime = new Date().getTime();
         const execTime = (endTime - startTime) / 1000;
         console.log(
-          `[getDailyCoinPriceMapBetween]-Getting <${snapshotDay}> price map done, <${execTime}> sec.`,
+          `[SnapPrice]-Getting <${snapshotDay}> price map done, <${execTime}> sec.`,
         );
 
         // Move to the next day
@@ -86,7 +131,7 @@ export class SnappriceService {
     return dayPriceMap;
   }
 
-  async findOneBySenderAndUpdate(
+  async findOneByDateAndUpdate(
     snapshotDay: string,
     coinType: string,
     snapprice: Snapprice,
@@ -103,15 +148,6 @@ export class SnappriceService {
       )
       .session(session)
       .exec();
-  }
-
-  // convert to yyyy-mm-dd format
-  getFormatDateString(date: Date = new Date()): string {
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0'); // +1 because months are 0-indexed
-    const year = date.getFullYear();
-
-    return `${year}-${month}-${day}`;
   }
 
   // convert to dd-mm-yyyy format
@@ -212,7 +248,7 @@ export class SnappriceService {
     ['AFSUI', 'sui'],
     ['HASUI', 'sui'],
     ['VSUI', 'sui'],
-    ['CERT', 'sui'],
+    // ['CERT', 'sui'],
   ]);
 
   getCoinSymbol(coinType: string): string {
@@ -255,14 +291,17 @@ export class SnappriceService {
     return coinPrice;
   }
 
-  async snapshotCoinPriceBetween(): Promise<void> {
-    const snapStartAt = process.env.SNAPSHOT_START_AT
-      ? new Date(process.env.SNAPSHOT_START_AT)
-      : new Date(this.getFormatDateString());
+  async snapshotCoinPriceBetween(
+    snapStartAt = new Date(),
+    snapEndAt = new Date(),
+  ): Promise<void> {
+    // const snapStartAt = process.env.SNAPSHOT_START_AT
+    //   ? new Date(process.env.SNAPSHOT_START_AT)
+    //   : new Date(this.getFormatDateString());
 
-    const snapEndAt = process.env.SNAPSHOT_END_AT
-      ? new Date(process.env.SNAPSHOT_END_AT)
-      : new Date(this.getFormatDateString());
+    // const snapEndAt = process.env.SNAPSHOT_END_AT
+    //   ? new Date(process.env.SNAPSHOT_END_AT)
+    //   : new Date(this.getFormatDateString());
 
     const endNextDate = new Date(snapEndAt);
     endNextDate.setDate(snapEndAt.getDate() + 1);
@@ -313,7 +352,7 @@ export class SnappriceService {
             coinDecimal: this.COIN_DECIMALS.get(coinType) || 0,
           };
           // console.log(snapprice);
-          const savedSnapprice = await this.findOneBySenderAndUpdate(
+          const savedSnapprice = await this.findOneByDateAndUpdate(
             snapprice.snapshotDay,
             coinType,
             snapprice,
