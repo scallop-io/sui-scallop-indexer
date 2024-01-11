@@ -2123,13 +2123,15 @@ export class StatisticService {
 
     let snapStartAt: Date;
     let snapEndAt: Date;
-    if (process.env.SNAPSHOT_START_AT) {
+    if (process.env.SNAPSHOT_MANUAL) {
       // get snapshot dates manually from env
-      snapStartAt = new Date(process.env.SNAPSHOT_START_AT);
+      snapStartAt = process.env.SNAPSHOT_START_AT
+        ? new Date(process.env.SNAPSHOT_START_AT)
+        : new Date(previousDay);
 
       snapEndAt = process.env.SNAPSHOT_END_AT
         ? new Date(process.env.SNAPSHOT_END_AT)
-        : today0am;
+        : new Date(previousDay);
     } else {
       // get snapshot date automatically
       snapEndAt = new Date(previousDay);

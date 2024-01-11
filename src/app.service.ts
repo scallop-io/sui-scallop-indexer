@@ -682,6 +682,13 @@ export class AppService {
       console.log(
         `[loopSnapshotBack][${new Date().toISOString()}]==== snapshotBack : <${execTime}> secs ====`,
       );
+
+      const snapshotLoop = Number(process.env.SNAPSHOT_LOOP) || 1;
+      const isSnapshotLoop = snapshotLoop === 1 ? true : false;
+      if (!isSnapshotLoop) {
+        break;
+      }
+
       const snapshotIntervalMinutes =
         Number(process.env.SNAPSHOT_INTERVAL_MINUTES) || 30;
 
