@@ -2159,7 +2159,7 @@ export class StatisticService {
       console.log(this._dailyCoinPriceMap);
 
       const snapActiveSendersFlag =
-        Number(process.env.SNAPSHOT_ACTIVE_SENDERS) || 1;
+        Number(process.env.SNAPSHOT_ACTIVE_SENDERS) || 0;
       const isSnapActiveSenders = snapActiveSendersFlag > 0 ? true : false;
       if (isSnapActiveSenders) {
         await this.phase2SnapshotUniqueActiveSenders(snapStartAt, snapEndAt);
