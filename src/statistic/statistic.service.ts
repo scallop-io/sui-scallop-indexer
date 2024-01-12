@@ -2170,7 +2170,12 @@ export class StatisticService {
       if (isSnapbatchObligations) {
         await this.phase2SnapshotObligationsBetween(snapStartAt, snapEndAt);
       }
-      await this.phase2SnapshotSuppliesBetween(snapStartAt, snapEndAt);
+
+      const snapSuppliesFlag = Number(process.env.SNAPSHOT_SUPPLIES) || 0;
+      const isSnapbatchSupplies = snapSuppliesFlag > 0 ? true : false;
+      if (isSnapbatchSupplies) {
+        await this.phase2SnapshotSuppliesBetween(snapStartAt, snapEndAt);
+      }
     } else {
       console.log(`[p2Snapshot][${today.toISOString()}]: No snapshot to do.`);
     }
