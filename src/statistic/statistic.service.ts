@@ -2451,7 +2451,7 @@ export class StatisticService {
           // );
           senderSupplyValue += coinValue;
         }
-        console.log(senderSupplyValue);
+        // console.log(senderSupplyValue);
 
         // calculate collateral & borrow value of sender
         let senderCollateralValue = 0;

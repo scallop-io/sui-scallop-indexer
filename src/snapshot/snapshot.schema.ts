@@ -21,16 +21,16 @@ export class Snapshot {
   @Prop({ required: true, index: true })
   sender?: string;
 
-  @Prop({ index: true, default: 0 })
+  @Prop({ index: true, default: 0.0 })
   supplyValue?: number;
 
-  @Prop({ index: true, default: 0 })
+  @Prop({ index: true, default: 0.0 })
   borrowValue?: number;
 
-  @Prop({ index: true, default: 0 })
+  @Prop({ index: true, default: 0.0 })
   collateralValue?: number;
 
-  @Prop({ index: true, default: 0 })
+  @Prop({ index: true, default: 0.0 })
   tvl?: number;
 }
 
