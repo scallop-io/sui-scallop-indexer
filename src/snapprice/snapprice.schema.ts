@@ -24,7 +24,7 @@ export class Snapprice {
   @Prop({ required: true, index: true })
   coinSymbol?: string;
 
-  @Prop({ index: true, default: 0 })
+  @Prop({ index: true, default: 0.0 })
   coinPrice?: number;
 
   @Prop({ index: true, default: 0 })

@@ -36,19 +36,29 @@ export class SupplyService {
     return this.supplyModel.find().skip(skipNumber).limit(subsetSize).exec();
   }
 
-  async findSortPageByTimestampMsBefore(
-    snapEndAt = new Date(),
-    pageSize = 1000,
-    pageNumber = 1,
-  ): Promise<Supply[]> {
+  async findSortedPage(pageSize = 1000, pageNumber = 1): Promise<Supply[]> {
     const skipNumber = (pageNumber - 1) * pageSize;
     return this.supplyModel
-      .find({ updatedAt: { $lt: snapEndAt } })
+      .find()
       .sort({ updatedAt: -1 }) // Sort by updatedAt in descending order
       .skip(skipNumber)
       .limit(pageSize)
       .exec();
   }
+
+  // async findSortPageByTimestampMsBefore(
+  //   snapEndAt = new Date(),
+  //   pageSize = 1000,
+  //   pageNumber = 1,
+  // ): Promise<Supply[]> {
+  //   const skipNumber = (pageNumber - 1) * pageSize;
+  //   return this.supplyModel
+  //     .find({ updatedAt: { $lt: snapEndAt } })
+  //     .sort({ updatedAt: -1 }) // Sort by updatedAt in descending order
+  //     .skip(skipNumber)
+  //     .limit(pageSize)
+  //     .exec();
+  // }
 
   // findBySender
   async findBySender(sender: string): Promise<Supply[]> {

@@ -1986,19 +1986,20 @@ export class StatisticService {
     snapEndAt = new Date(),
   ): Promise<void> {
     try {
-      const snapEndTSms = snapEndAt.getTime();
+      // const snapEndTSms = snapEndAt.getTime();
       const startTime = new Date().getTime();
 
       console.log('[p2Snapshot-Obligations]: Getting uniqueSortedSenders ....');
-      const uniqueSortedSenders =
-        await this._obligationService.findUniqueSortSendersByTimestampMsBefore(
-          snapEndTSms,
-        );
+      // const uniqueSortedSenders =
+      //   await this._obligationService.findUniqueSortSendersByTimestampMsBefore(
+      //     snapEndTSms,
+      //   );
+      const uniqueSenders = await this._obligationService.findDistinctSenders();
 
       let senderCount = 0;
       let senderStartTime = new Date().getTime();
       let senderEndTime = new Date().getTime();
-      for (const sender of uniqueSortedSenders) {
+      for (const sender of uniqueSenders) {
         senderStartTime = new Date().getTime();
         senderCount += 1;
 
@@ -2013,18 +2014,18 @@ export class StatisticService {
           const senderExecTime = (senderEndTime - senderStartTime) / 1000;
 
           console.log(
-            `[p2Snapshot-Obligations]: (${senderCount}/${uniqueSortedSenders.length})], ${sender} , snapshots<${savedSnapshots.length}> , <${senderExecTime}> sec.`,
+            `[p2Snapshot-Obligations]: (${senderCount}/${uniqueSenders.length})], ${sender} , snapshots<${savedSnapshots.length}> , <${senderExecTime}> sec.`,
           );
         } else {
           console.log(
-            `[p2Snapshot-Obligations]: (${senderCount}/${uniqueSortedSenders.length})]: Skip ${sender} due to already snapshoted`,
+            `[p2Snapshot-Obligations]: (${senderCount}/${uniqueSenders.length})]: Skip ${sender} due to already snapshoted`,
           );
         }
       }
       const endTime = new Date().getTime();
       const batchExecTime = (endTime - startTime) / 1000;
       console.log(
-        `[p2Snapshot-Obligations]: <${uniqueSortedSenders.length}>, <${batchExecTime}> sec.`,
+        `[p2Snapshot-Obligations]: <${uniqueSenders.length}>, <${batchExecTime}> sec.`,
       );
     } catch (e) {
       console.error(
@@ -2053,12 +2054,16 @@ export class StatisticService {
       while (true) {
         pageStartTime = new Date().getTime();
 
-        const pageSupplies =
-          await this._supplyService.findSortPageByTimestampMsBefore(
-            snapEndAt,
-            pageSize,
-            pageIdx,
-          );
+        // const pageSupplies =
+        //   await this._supplyService.findSortPageByTimestampMsBefore(
+        //     snapEndAt,
+        //     pageSize,
+        //     pageIdx,
+        //   );
+        const pageSupplies = await this._supplyService.findSortedPage(
+          pageSize,
+          pageIdx,
+        );
         totalSupplyCount += pageSupplies.length;
 
         // if there are no more supplies, break
@@ -2176,6 +2181,13 @@ export class StatisticService {
       if (isSnapbatchSupplies) {
         await this.phase2SnapshotSuppliesBetween(snapStartAt, snapEndAt);
       }
+
+      // const sender =
+      //   '0xaa2061f69ae20496f8386c97ad28f88bb3a1288db005753faab7d6601f420eee';
+      // // const sender =
+      //   '0xbaa0e9e901ad8bbb523edc0b13182cc3a7cd57cb8fcc052920f1c2830d3c717f';
+
+      // await this.phase2SnapshotSenderBetween(sender, snapStartAt, snapEndAt);
     } else {
       console.log(`[p2Snapshot][${today.toISOString()}]: No snapshot to do.`);
     }
@@ -2216,13 +2228,6 @@ export class StatisticService {
       await this.phase2SnapshotObligationsBetween(snapStartAt, snapEndAt);
     }
     await this.phase2SnapshotSuppliesBetween(snapStartAt, snapEndAt);
-
-    // const sender =
-    //   '0xe55a1b73a9fc9dfc88805846ba33d5576ba2953fcf6ca465c2ef3af2cc73e4ba';
-    // // const sender =
-    //   '0xbaa0e9e901ad8bbb523edc0b13182cc3a7cd57cb8fcc052920f1c2830d3c717f';
-
-    // await this.phase2SnapshotSenderBetween(sender, snapStartAt, snapEndAt);
   }
 
   async phase2SnapshotSenderBetween(
@@ -2292,7 +2297,7 @@ export class StatisticService {
 
       // endTime = new Date().getTime();
       // execTime = (endTime - startTime) / 1000;
-      // // console.log(`[p2Snapshot]- Get <${sender}> txs done, <${execTime}> sec.`);
+      // console.log(`[p2Snapshot]- Get <${sender}> txs done, <${execTime}> sec.`);
 
       let currentDate = snapStartAt;
       while (currentDate <= snapEndAt) {
@@ -2331,8 +2336,8 @@ export class StatisticService {
             supplyBalanceMap.set(coinName, caculatedBalance);
           }
         }
-        // console.log(`[getSenderSupplyAssets]- balanceMap: ${balanceMap}`);
-        // console.log(balanceMap);
+        // console.log(`[getSenderSupplyAssets]- balanceMap: ${supplyBalanceMap}`);
+        // console.log(supplyBalanceMap);
 
         // Check supply assets balance
         const supplyAssets = [];
@@ -2441,10 +2446,12 @@ export class StatisticService {
           const coinPrice = coinPriceMap.get(asset.coin) || 0;
           const multiple = this.getDecimalMultiplier(asset.coin);
           const coinValue = asset.balance * multiple * coinPrice;
-          // console.log(`[Snapshot]- <${asset.coin}>@<${coinPrice}>= ${coinValue}`);
+          // console.log(
+          //   `[Snapshot]- <${asset.coin}>@<${coinPrice}>= ${coinValue}`,
+          // );
           senderSupplyValue += coinValue;
         }
-        // console.log(senderSupplyValue);
+        console.log(senderSupplyValue);
 
         // calculate collateral & borrow value of sender
         let senderCollateralValue = 0;
@@ -2488,6 +2495,8 @@ export class StatisticService {
             snapshotDay: snapshotDay,
           };
 
+          // console.log(snapshot);
+
           const savedSnapshot =
             await this._snapshotService.findOneAndUpdateBySenderAt(
               snapshot.snapshotDay,
@@ -2509,10 +2518,7 @@ export class StatisticService {
           // );
         }
 
-        // console.log(snapshot);
-
         // Move to the next day
-
         currentDate = nextDate;
       } // end of while
     } catch (e) {

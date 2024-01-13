@@ -662,8 +662,6 @@ export class AppService {
   }
 
   async loopSnapshotBack(): Promise<void> {
-    // const start = new Date().getTime();
-
     // await this._statisticService.snapshotAll();
     // await this._statisticService.phase1Snapbatch();
     // await this._statisticService.recalculateSnapbatchValues();
