@@ -14,6 +14,8 @@ import { WithdrawModule } from 'src/withdraw/withdraw.module';
 import { BorrowModule } from 'src/borrow/borrow.module';
 import { RepayModule } from 'src/repay/repay.module';
 import { SnappriceModule } from 'src/snapprice/snapprice.module';
+import { Snapairdrop } from 'src/snapairdrop/snapairdrop.schema';
+import { SnapairdropModule } from 'src/snapairdrop/snapairdrop.module';
 
 @Module({
   imports: [
@@ -32,6 +34,7 @@ import { SnappriceModule } from 'src/snapprice/snapprice.module';
     SnapshotModule,
     SnappriceModule,
     SnapbatchModule,
+    SnapairdropModule,
   ],
   providers: [StatisticService],
   exports: [StatisticService],

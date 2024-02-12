@@ -20,6 +20,7 @@ import { SupplyModule } from './supply/supply.module';
 import { SnapshotModule } from './snapshot/snapshot.module';
 import { SnapbatchModule } from './snapbatch/snapbatch.module';
 import { SnappriceModule } from './snapprice/snapprice.module';
+import { SnapairdropModule } from './snapairdrop/snapairdrop.module';
 
 dotenv.config();
 
@@ -49,6 +50,7 @@ dotenv.config();
     SnapshotModule,
     SnapbatchModule,
     SnappriceModule,
+    SnapairdropModule,
   ],
   providers: [AppService],
 })

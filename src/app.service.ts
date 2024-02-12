@@ -669,31 +669,38 @@ export class AppService {
 
     // await this._snappriceService.snapshotCoinPriceBetween();
     // await this._statisticService.phase2SnapshotBetween();
+    const snapAirdropFlag = Number(process.env.SNAPSHOT_AIRDROP) || 0;
+    const isSnapAirdrop = snapAirdropFlag > 0 ? true : false;
+    if (isSnapAirdrop) {
+      //CNY Campaign Airdrop snapshot
+      await this._statisticService.snapairdropBack();
+    } else {
+      //Daily snapshot
+      while (true) {
+        const start = new Date().getTime();
 
-    while (true) {
-      const start = new Date().getTime();
+        await this._statisticService.snapshotBack();
 
-      await this._statisticService.snapshotBack();
+        const end = new Date().getTime();
+        const execTime = (end - start) / 1000;
+        console.log(
+          `[loopSnapshotBack][${new Date().toISOString()}]==== snapshotBack : <${execTime}> secs ====`,
+        );
 
-      const end = new Date().getTime();
-      const execTime = (end - start) / 1000;
-      console.log(
-        `[loopSnapshotBack][${new Date().toISOString()}]==== snapshotBack : <${execTime}> secs ====`,
-      );
+        const snapshotLoop = Number(process.env.SNAPSHOT_LOOP) || 1;
+        const isSnapshotLoop = snapshotLoop === 1 ? true : false;
+        if (!isSnapshotLoop) {
+          break;
+        }
 
-      const snapshotLoop = Number(process.env.SNAPSHOT_LOOP) || 1;
-      const isSnapshotLoop = snapshotLoop === 1 ? true : false;
-      if (!isSnapshotLoop) {
-        break;
-      }
+        const snapshotIntervalMinutes =
+          Number(process.env.SNAPSHOT_INTERVAL_MINUTES) || 30;
 
-      const snapshotIntervalMinutes =
-        Number(process.env.SNAPSHOT_INTERVAL_MINUTES) || 30;
-
-      console.log(
-        `[loopSnapshotBack][${new Date().toISOString()}]==== snapshotBack : wait for <${snapshotIntervalMinutes}> minutes ====`,
-      );
-      await this.delay(snapshotIntervalMinutes * 60 * 1000);
-    } //end of while
+        console.log(
+          `[loopSnapshotBack][${new Date().toISOString()}]==== snapshotBack : wait for <${snapshotIntervalMinutes}> minutes ====`,
+        );
+        await this.delay(snapshotIntervalMinutes * 60 * 1000);
+      } //end of while
+    }
   }
 }

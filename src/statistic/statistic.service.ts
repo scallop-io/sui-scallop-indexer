@@ -11,13 +11,14 @@ import { MintService } from 'src/mint/mint.service';
 import { RedeemService } from 'src/redeem/redeem.service';
 import { SnapshotService } from '../snapshot/snapshot.service';
 import { Snapshot } from '../snapshot/snapshot.schema';
-import { SnapbatchService } from 'src/snapbatch/snapbatch.service';
+// import { SnapbatchService } from 'src/snapbatch/snapbatch.service';
 // import { Snapbatch } from 'src/snapbatch/snapbatch.schema';
 import { DepositService } from 'src/deposit/deposit.service';
 import { WithdrawService } from 'src/withdraw/withdraw.service';
 import { BorrowService } from 'src/borrow/borrow.service';
 import { RepayService } from 'src/repay/repay.service';
 import { SnappriceService } from 'src/snapprice/snapprice.service';
+import { SnapairdropService } from 'src/snapairdrop/snapairdrop.service';
 
 @Injectable()
 export class StatisticService {
@@ -54,8 +55,8 @@ export class StatisticService {
   @Inject(SnappriceService)
   private readonly _snappriceService: SnappriceService;
 
-  @Inject(SnapbatchService)
-  private readonly _snapbatchService: SnapbatchService;
+  @Inject(SnapairdropService)
+  private readonly _snapairdropService: SnapairdropService;
 
   private static _logTime = new Date().getTime();
 
@@ -1381,6 +1382,601 @@ export class StatisticService {
       );
     } finally {
       return savedSnapshots;
+    }
+  }
+
+  async snapairdropBack(): Promise<void> {
+    // decide start date & end date
+    const today = new Date();
+    const today0am = new Date(today.toISOString().split('T')[0]);
+    const previousDay = new Date(today0am);
+    previousDay.setDate(today0am.getDate() - 1);
+    const snapEndTSms = today0am.getTime();
+
+    let snapStartAt: Date;
+    let snapEndAt: Date;
+    if (process.env.SNAPSHOT_MANUAL) {
+      // get snapshot dates manually from env
+      snapStartAt = process.env.SNAPSHOT_START_AT
+        ? new Date(process.env.SNAPSHOT_START_AT)
+        : new Date(previousDay);
+
+      snapEndAt = process.env.SNAPSHOT_END_AT
+        ? new Date(process.env.SNAPSHOT_END_AT)
+        : new Date(previousDay);
+    } else {
+      // get snapshot date automatically
+      snapEndAt = new Date(previousDay);
+
+      while (!(await this.isThisDaySnapairdroped(previousDay))) {
+        snapStartAt = new Date(previousDay);
+        // move to the previous day
+        previousDay.setDate(snapStartAt.getDate() - 1);
+      } // end of while
+    }
+
+    if (snapStartAt) {
+      console.log(
+        `[SnapAirdrop][${today.toISOString()}]: Snapshot from<${
+          snapStartAt.toISOString().split('T')[0]
+        }>, To<${today0am.toISOString()}>(${snapEndTSms})`,
+      );
+
+      // Get all history coin price map
+      this._dailyCoinPriceMap =
+        await this._snappriceService.getDailyCoinPriceMapBetween(
+          snapStartAt,
+          snapEndAt,
+        );
+      console.log(this._dailyCoinPriceMap);
+
+      const snapActiveSendersFlag =
+        Number(process.env.SNAPSHOT_ACTIVE_SENDERS) || 0;
+      const isSnapActiveSenders = snapActiveSendersFlag > 0 ? true : false;
+      if (isSnapActiveSenders) {
+        await this.snapairdropUniqueActiveSenders(snapStartAt, snapEndAt);
+      }
+
+      const snapObligationsFlag = Number(process.env.SNAPSHOT_OBLIGATIONS) || 0;
+      const isSnapbatchObligations = snapObligationsFlag > 0 ? true : false;
+      if (isSnapbatchObligations) {
+        await this.snapairdropObligationsBetween(snapStartAt, snapEndAt);
+      }
+
+      const snapSuppliesFlag = Number(process.env.SNAPSHOT_SUPPLIES) || 0;
+      const isSnapbatchSupplies = snapSuppliesFlag > 0 ? true : false;
+      if (isSnapbatchSupplies) {
+        await this.snapairdropSuppliesBetween(snapStartAt, snapEndAt);
+      }
+    } else {
+      console.log(`[SnapAirdrop][${today.toISOString()}]: No snapshot to do.`);
+    }
+  }
+
+  async snapairdropUniqueActiveSenders(
+    snapStartAt = new Date(),
+    snapEndAt = new Date(),
+  ): Promise<void> {
+    try {
+      // const snapEndTSms = snapEndAt.getTime();
+      const startTime = new Date().getTime();
+
+      console.log('[SnapAirdrop-ActiveSenders]: Getting uniqueSenders ....');
+      const uniqueSenders = await this._snapshotService.findDistinctSenders();
+
+      let senderCount = 0;
+      let senderStartTime = new Date().getTime();
+      let senderEndTime = new Date().getTime();
+      for (const sender of uniqueSenders) {
+        senderStartTime = new Date().getTime();
+        senderCount += 1;
+
+        if (!(await this.isSenderSnapairdropedAt(sender, snapEndAt))) {
+          // if (!(await this.isSenderSnapairdroped(sender))) {
+          const savedSnapairdrops = await this.snapairdropSenderBetween(
+            sender,
+            snapStartAt,
+            snapEndAt,
+          );
+
+          senderEndTime = new Date().getTime();
+          const senderExecTime = (senderEndTime - senderStartTime) / 1000;
+
+          console.log(
+            `[SnapAirdrop-ActiveSenders]: (${senderCount}/${uniqueSenders.length})], ${sender} , snapshots<${savedSnapairdrops.length}> , <${senderExecTime}> sec.`,
+          );
+        } else {
+          console.log(
+            `[SnapAirdrop-ActiveSenders]: (${senderCount}/${uniqueSenders.length})]: Skip ${sender} due to already snapshoted`,
+          );
+        }
+      }
+      const endTime = new Date().getTime();
+      const batchExecTime = (endTime - startTime) / 1000;
+      console.log(
+        `[SnapAirdrop-ActiveSenders]: <${uniqueSenders.length}>, <${batchExecTime}> sec.`,
+      );
+    } catch (e) {
+      console.error(`Error caught while snapairdropUniqueActiveSenders() ${e}`);
+    }
+  }
+
+  async isThisDaySnapairdroped(snapAt = new Date()): Promise<boolean> {
+    const snapairdrops = await this._snapairdropService.findBySnapairdropDay(
+      snapAt,
+    );
+
+    return snapairdrops.length > 0 ? true : false;
+  }
+
+  async isSenderSnapairdropedAt(
+    sender: string,
+    snapAt = new Date(),
+  ): Promise<boolean> {
+    const snapairdrops = await this._snapairdropService.findBySenderAt(
+      sender,
+      snapAt,
+    );
+    if (snapairdrops.length > 0) {
+      return true;
+    }
+    return false;
+  }
+
+  async isSenderSnapairdroped(sender: string): Promise<boolean> {
+    const snapairdrops = await this._snapairdropService.findBySender(sender);
+    if (snapairdrops.length > 0) {
+      return true;
+    }
+    return false;
+  }
+
+  async snapairdropSenderBetween(
+    sender: string,
+    snapStartAt = new Date(),
+    snapEndAt = new Date(),
+  ): Promise<Snapshot[]> {
+    const savedSnapairdrops = [];
+    try {
+      const endNextDate = new Date(snapEndAt);
+      endNextDate.setDate(snapEndAt.getDate() + 1);
+      const snapEndTSms = endNextDate.getTime();
+
+      // let startTime = new Date().getTime();
+      // let endTime = new Date().getTime();
+      // let execTime = 0;
+
+      // Get all mint/redeem transactions of sender
+      const mintList = await this._mintService.findBySenderBefore(
+        sender,
+        snapEndTSms,
+      );
+      // console.log(mintList);
+      const redeemList = await this._redeemService.findBySenderBefore(
+        sender,
+        snapEndTSms,
+      );
+
+      const senderObligations =
+        await this._obligationService.findBySenderBefore(sender, snapEndTSms);
+
+      // console.log(senderObligations);
+      const depositList = [],
+        withdrawList = [],
+        borrowList = [],
+        repayList = [];
+      for (const senderObligation of senderObligations) {
+        const obligationId = senderObligation.obligation_id;
+        // Get all deposit/withdraw transactions of obligation_id
+        const oblDepositList =
+          await this._depositService.findByObligationIdBefore(
+            obligationId,
+            snapEndTSms,
+          );
+        const oblWithdrawList =
+          await this._withdrawService.findByObligationIdBefore(
+            obligationId,
+            snapEndTSms,
+          );
+        depositList.push(...oblDepositList);
+        withdrawList.push(...oblWithdrawList);
+
+        // Get all borrow/repay transactions of obligation_id
+        const oblBorrowList =
+          await this._borrowService.findByObligationIdBefore(
+            obligationId,
+            snapEndTSms,
+          );
+
+        const oblRepayList = await this._repayService.findByObligationIdBefore(
+          obligationId,
+          snapEndTSms,
+        );
+        borrowList.push(...oblBorrowList);
+        repayList.push(...oblRepayList);
+      }
+
+      // endTime = new Date().getTime();
+      // execTime = (endTime - startTime) / 1000;
+      // console.log(`[p2Snapshot]- Get <${sender}> txs done, <${execTime}> sec.`);
+
+      let currentDate = snapStartAt;
+      while (currentDate <= snapEndAt) {
+        // startTime = new Date().getTime();
+        // const snapshotedAt = currentDate;
+        // const snapTimestamp = currentDate.getTime();
+        const nextDate = new Date(currentDate);
+        nextDate.setDate(currentDate.getDate() + 1);
+        const snapTimestamp = nextDate.getTime();
+
+        // Calculate supply balance
+        const supplyBalanceMap = new Map<string, number>();
+        for (let i = 0; i < mintList.length; i++) {
+          const mint = mintList[i];
+          if (Number(mint.timestampMs) < snapTimestamp) {
+            const coinName = mint.depositAsset;
+            const coinAmount = Number(mint.depositAmount);
+            let balance = 0;
+            if (supplyBalanceMap.has(coinName)) {
+              balance = supplyBalanceMap.get(coinName);
+            }
+            const caculatedBalance = Math.max(0, balance + coinAmount);
+            supplyBalanceMap.set(coinName, caculatedBalance);
+          }
+        }
+        for (let i = 0; i < redeemList.length; i++) {
+          const redeem = redeemList[i];
+          if (Number(redeem.timestampMs) < snapTimestamp) {
+            const coinName = redeem.withdrawAsset;
+            const coinAmount = Number(redeem.withdrawAmount);
+            let balance = 0;
+            if (supplyBalanceMap.has(coinName)) {
+              balance = supplyBalanceMap.get(coinName);
+            }
+            const caculatedBalance = Math.max(0, balance - coinAmount);
+            supplyBalanceMap.set(coinName, caculatedBalance);
+          }
+        }
+        // console.log(`[getSenderSupplyAssets]- balanceMap: ${supplyBalanceMap}`);
+        // console.log(supplyBalanceMap);
+
+        // Check supply assets balance
+        const supplyAssets = [];
+        for (const [coinName, balance] of supplyBalanceMap) {
+          const processedBalance = Math.max(0, balance);
+          if (processedBalance > 0) {
+            const asset = {
+              coin: coinName,
+              balance: balance,
+            };
+            supplyAssets.push(asset);
+          }
+        }
+
+        // Calculate collateral balance
+        const collateralBalanceMap = new Map<string, number>();
+        for (let i = 0; i < depositList.length; i++) {
+          const deposit = depositList[i];
+          if (Number(deposit.timestampMs) < snapTimestamp) {
+            const coinName = deposit.asset;
+            const coinAmount = Number(deposit.amount);
+            let balance = 0;
+            if (collateralBalanceMap.has(coinName)) {
+              balance = collateralBalanceMap.get(coinName);
+            }
+            const caculatedBalance = Math.max(0, balance + coinAmount);
+            collateralBalanceMap.set(coinName, caculatedBalance);
+          }
+        }
+        for (let i = 0; i < withdrawList.length; i++) {
+          const withdraw = withdrawList[i];
+          if (Number(withdraw.timestampMs) < snapTimestamp) {
+            const coinName = withdraw.asset;
+            const coinAmount = Number(withdraw.amount);
+            let balance = 0;
+            if (collateralBalanceMap.has(coinName)) {
+              balance = collateralBalanceMap.get(coinName);
+            }
+            const caculatedBalance = Math.max(0, balance - coinAmount);
+            collateralBalanceMap.set(coinName, caculatedBalance);
+          }
+        }
+
+        // Check collateral assets balance
+        const collateralAssets = [];
+        for (const [coinName, balance] of collateralBalanceMap) {
+          const processedBalance = Math.max(0, balance);
+          if (processedBalance > 0) {
+            const asset = {
+              coin: coinName,
+              balance: balance,
+            };
+            collateralAssets.push(asset);
+          }
+        }
+
+        // Calculate debts balance
+        const debtBalanceMap = new Map<string, number>();
+        for (let i = 0; i < borrowList.length; i++) {
+          const borrow = borrowList[i];
+          if (Number(borrow.timestampMs) < snapTimestamp) {
+            const coinName = borrow.asset;
+            const coinAmount = Number(borrow.amount);
+            let balance = 0;
+            if (debtBalanceMap.has(coinName)) {
+              balance = debtBalanceMap.get(coinName);
+            }
+            const caculatedBalance = Math.max(0, balance + coinAmount);
+            debtBalanceMap.set(coinName, caculatedBalance);
+          }
+        }
+        for (let i = 0; i < repayList.length; i++) {
+          const repay = repayList[i];
+          if (Number(repay.timestampMs) < snapTimestamp) {
+            const coinName = repay.asset;
+            const coinAmount = Number(repay.amount);
+            let balance = 0;
+            if (debtBalanceMap.has(coinName)) {
+              balance = debtBalanceMap.get(coinName);
+            }
+            const caculatedBalance = Math.max(0, balance - coinAmount);
+            debtBalanceMap.set(coinName, caculatedBalance);
+          }
+        }
+
+        // Check debts assets balance
+        const debtAssets = [];
+        for (const [coinName, balance] of debtBalanceMap) {
+          const processedBalance = Math.max(0, balance);
+          if (processedBalance > 0) {
+            const asset = {
+              coin: coinName,
+              balance: balance,
+            };
+            debtAssets.push(asset);
+          }
+        }
+
+        const snapairdropDay = currentDate.toISOString().split('T')[0];
+
+        // calculate supply value of sender
+        let senderSupplyValue = 0;
+        // const coinPriceMap = dayPriceMap.get(csnapshotDay);
+        const coinPriceMap = this._dailyCoinPriceMap.get(snapairdropDay);
+        for (const asset of supplyAssets) {
+          const coinPrice = coinPriceMap.get(asset.coin) || 0;
+          const multiple = this.getDecimalMultiplier(asset.coin);
+          const coinValue = asset.balance * multiple * coinPrice;
+          // console.log(
+          //   `[Snapshot]- <${asset.coin}>@<${coinPrice}>= ${coinValue}`,
+          // );
+          senderSupplyValue += coinValue;
+        }
+        // console.log(senderSupplyValue);
+
+        // calculate collateral & borrow value of sender
+        let senderCollateralValue = 0;
+        for (const collateral of collateralAssets) {
+          const coinPrice = coinPriceMap.get(collateral.coin) || 0;
+          const multiple = this.getDecimalMultiplier(collateral.coin);
+          const coinValue = collateral.balance * multiple * coinPrice;
+          senderCollateralValue += coinValue;
+        }
+        let senderBorrowValue = 0;
+        for (const debt of debtAssets) {
+          const coinPrice = coinPriceMap.get(debt.coin) || 0;
+          const multiple = this.getDecimalMultiplier(debt.coin);
+          const coinValue = debt.balance * multiple * coinPrice;
+
+          senderBorrowValue += coinValue;
+        }
+
+        const senderTvl = Math.max(
+          0,
+          senderSupplyValue + senderCollateralValue - senderBorrowValue,
+        );
+
+        const supplyValueThreshold =
+          Number(process.env.SNAPSHOT_SUPPLY_VALUE_THRESHOLD) || 1;
+        const borrowValueThreshold =
+          Number(process.env.SNAPSHOT_BORROW_VALUE_THRESHOLD) || 1;
+        const collateralValueThreshold =
+          Number(process.env.SNAPSHOT_COLLATERAL_VALUE_THRESHOLD) || 1;
+        const tvlThreshold = Number(process.env.SNAPSHOT_TVL_THRESHOLD) || 1;
+
+        if (
+          senderSupplyValue >= supplyValueThreshold ||
+          senderBorrowValue >= borrowValueThreshold ||
+          senderCollateralValue >= collateralValueThreshold
+        ) {
+          const snapairdrop = {
+            sender: sender,
+            supplyValue: senderSupplyValue,
+            collateralValue: senderCollateralValue,
+            borrowValue: senderBorrowValue,
+            tvl: senderTvl,
+
+            supplyEligible: senderSupplyValue >= supplyValueThreshold ? 1 : 0,
+            collateralEligible:
+              senderCollateralValue >= collateralValueThreshold ? 1 : 0,
+            borrowEligible: senderBorrowValue >= borrowValueThreshold ? 1 : 0,
+            tvlEligible: senderTvl >= tvlThreshold ? 1 : 0,
+
+            // snapshotedAt: snapshotedAt,
+            snapairdropDay: snapairdropDay,
+          };
+
+          // console.log(snapshot);
+
+          const savedSnapairdrop =
+            await this._snapairdropService.findOneAndUpdateBySenderAt(
+              snapairdrop.snapairdropDay,
+              snapairdrop.sender,
+              snapairdrop,
+            );
+          savedSnapairdrops.push(savedSnapairdrop);
+
+          // Only snapshot sender's first eligible day
+          const snapAirdropSkip = Number(process.env.SNAPAIRDROP_SKIP) || 0;
+          const isSnapAirdropSkip = snapAirdropSkip > 0 ? true : false;
+          if (isSnapAirdropSkip) {
+            console.log(
+              `[SnapAirdrop]: <${snapairdrop.sender}>@<${snapairdrop.snapairdropDay}>: <${snapairdrop.supplyValue}>, <${snapairdrop.collateralValue}>, <${snapairdrop.borrowValue}>, <${snapairdrop.tvl}>`,
+            );
+            break;
+          }
+
+          // endTime = new Date().getTime();
+          // execTime = (endTime - startTime) / 1000;
+          // // console.log(
+          //   `[p2Snapshot][${snapshotDay}]:sender<${sender}>, borrowValue<${savedSnapshot.borrowValue}>, supplyValue<${savedSnapshot.supplyValue}, <${execTime}> sec. `,
+          // );
+        } else {
+          // endTime = new Date().getTime();
+          // execTime = (endTime - startTime) / 1000;
+          // console.log(
+          //   `[p2Snapshot][${snapshotDay}]:sender<${sender}>, No borrowValue & supplyValue, <${execTime}> sec. `,
+          // );
+        }
+
+        // Move to the next day
+        currentDate = nextDate;
+      } // end of while
+    } catch (e) {
+      console.error(
+        `Error caught while snapairdropSenderBetween()-From<${snapStartAt.toISOString()}><${sender}> ${e}`,
+      );
+    } finally {
+      return savedSnapairdrops;
+    }
+  }
+
+  async snapairdropObligationsBetween(
+    snapStartAt = new Date(),
+    snapEndAt = new Date(),
+  ): Promise<void> {
+    try {
+      // const snapEndTSms = snapEndAt.getTime();
+      const startTime = new Date().getTime();
+
+      console.log(
+        '[SnapAirdrop-Obligations]: Getting uniqueSortedSenders ....',
+      );
+      const uniqueSenders = await this._obligationService.findDistinctSenders();
+
+      let senderCount = 0;
+      let senderStartTime = new Date().getTime();
+      let senderEndTime = new Date().getTime();
+      for (const sender of uniqueSenders) {
+        senderStartTime = new Date().getTime();
+        senderCount += 1;
+
+        if (!(await this.isSenderSnapairdropedAt(sender, snapEndAt))) {
+          // if (!(await this.isSenderSnapairdroped(sender))) {
+          const savedSnapairdrops = await this.snapairdropSenderBetween(
+            sender,
+            snapStartAt,
+            snapEndAt,
+          );
+
+          senderEndTime = new Date().getTime();
+          const senderExecTime = (senderEndTime - senderStartTime) / 1000;
+
+          console.log(
+            `[SnapAirdrop-Obligations]: (${senderCount}/${uniqueSenders.length})], ${sender} , snapshots<${savedSnapairdrops.length}> , <${senderExecTime}> sec.`,
+          );
+        } else {
+          console.log(
+            `[SnapAirdrop-Obligations]: (${senderCount}/${uniqueSenders.length})]: Skip ${sender} due to already snapshoted`,
+          );
+        }
+      }
+      const endTime = new Date().getTime();
+      const batchExecTime = (endTime - startTime) / 1000;
+      console.log(
+        `[SnapAirdrop-Obligations]: <${uniqueSenders.length}>, <${batchExecTime}> sec.`,
+      );
+    } catch (e) {
+      console.error(`Error caught while snapairdropObligationsBetween() ${e}`);
+    }
+  }
+
+  async snapairdropSuppliesBetween(
+    snapStartAt = new Date(),
+    snapEndAt = new Date(),
+  ): Promise<void> {
+    try {
+      // const snapEndTSms = snapEndAt.getTime();
+      const startTime = new Date().getTime();
+
+      // get all senders page by page
+      const pageSize = Number(process.env.SNAPSHOT_PAGE_SIZE) || 1000;
+      const pageStart = Number(process.env.SNAPSHOT_PAGE_START) || 1;
+      const pageEnd = Number(process.env.SNAPSHOT_PAGE_END) || 9999;
+
+      let pageIdx = pageStart;
+      let totalSupplyCount = 0;
+      let pageStartTime;
+      let pageEndTime;
+      while (true) {
+        pageStartTime = new Date().getTime();
+
+        const pageSupplies = await this._supplyService.findSortedPage(
+          pageSize,
+          pageIdx,
+        );
+        totalSupplyCount += pageSupplies.length;
+
+        // if there are no more supplies, break
+        if (pageSupplies.length === 0) {
+          break;
+        }
+
+        let senderCount = 0;
+        let senderStartTime = new Date().getTime();
+        let senderEndTime = new Date().getTime();
+        for (const supply of pageSupplies) {
+          senderCount += 1;
+
+          if (!(await this.isSenderSnapairdropedAt(supply.sender, snapEndAt))) {
+            // if (!(await this.isSenderSnapairdroped(supply.sender))) {
+            senderStartTime = new Date().getTime();
+            const savedSnapshots = await this.snapairdropSenderBetween(
+              supply.sender,
+              snapStartAt,
+              snapEndAt,
+            );
+
+            senderEndTime = new Date().getTime();
+            const senderExecTime = (senderEndTime - senderStartTime) / 1000;
+            console.log(
+              `[SnapAirdrop-Supplies]: Page[${pageIdx}](${senderCount}/${pageSupplies.length})]: ${supply.sender} , snapshots<${savedSnapshots.length}> , <${senderExecTime}> sec.`,
+            );
+          } else {
+            console.log(
+              `[SnapAirdrop-Supplies]: Page[${pageIdx}](${senderCount}/${pageSupplies.length})]: Skip ${supply.sender} due to already snapshoted`,
+            );
+          }
+        }
+        pageEndTime = new Date().getTime();
+        const pageExecTime = (pageEndTime - pageStartTime) / 1000;
+        console.log(
+          `[SnapAirdrop-Supplies]: Page[${pageIdx}](${senderCount}/${pageSupplies.length})]: , <${pageExecTime}> sec. `,
+        );
+
+        pageIdx += 1;
+        if (pageIdx > pageEnd) {
+          break;
+        }
+      } //end of while
+
+      const endTime = new Date().getTime();
+      const execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[SnapAirdrop-Supplies]: Total<${totalSupplyCount}>  , <${execTime}> sec.`,
+      );
+    } catch (e) {
+      console.error(`Error caught while snapairdropSuppliesBetween() ${e}`);
     }
   }
 }
