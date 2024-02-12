@@ -1785,9 +1785,9 @@ export class StatisticService {
         const tvlThreshold = Number(process.env.SNAPSHOT_TVL_THRESHOLD) || 1;
 
         if (
-          senderSupplyValue >= supplyValueThreshold ||
-          senderBorrowValue >= borrowValueThreshold ||
-          senderCollateralValue >= collateralValueThreshold
+          senderSupplyValue > supplyValueThreshold ||
+          senderBorrowValue > borrowValueThreshold ||
+          senderCollateralValue > collateralValueThreshold
         ) {
           const snapairdrop = {
             sender: sender,
@@ -1796,11 +1796,11 @@ export class StatisticService {
             borrowValue: senderBorrowValue,
             tvl: senderTvl,
 
-            supplyEligible: senderSupplyValue >= supplyValueThreshold ? 1 : 0,
+            supplyEligible: senderSupplyValue > supplyValueThreshold ? 1 : 0,
             collateralEligible:
-              senderCollateralValue >= collateralValueThreshold ? 1 : 0,
-            borrowEligible: senderBorrowValue >= borrowValueThreshold ? 1 : 0,
-            tvlEligible: senderTvl >= tvlThreshold ? 1 : 0,
+              senderCollateralValue > collateralValueThreshold ? 1 : 0,
+            borrowEligible: senderBorrowValue > borrowValueThreshold ? 1 : 0,
+            tvlEligible: senderTvl > tvlThreshold ? 1 : 0,
 
             // snapshotedAt: snapshotedAt,
             snapairdropDay: snapairdropDay,
