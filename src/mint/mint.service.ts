@@ -128,4 +128,36 @@ export class MintService {
 
     return distinctSenders.map((doc) => doc._id);
   }
+
+  async findSortedPage(pageSize = 1000, pageNumber = 1): Promise<Mint[]> {
+    const skipNumber = (pageNumber - 1) * pageSize;
+    return this.mintModel
+      .find()
+      .sort({ timestampMs: -1 }) // Sort by timestampMs in descending order
+      .skip(skipNumber)
+      .limit(pageSize)
+      .exec();
+  }
+
+  async findSortedUniqueSendersPage(
+    pageSize = 1000,
+    pageNumber = 1,
+  ): Promise<string[]> {
+    const senderSet = new Set();
+    const uniqueSenders = [];
+    const skipNumber = (pageNumber - 1) * pageSize;
+    const mints = await this.mintModel
+      .find()
+      .sort({ timestampMs: -1 }) // Sort by timestampMs in descending order
+      .skip(skipNumber)
+      .limit(pageSize)
+      .exec();
+    for (const mint of mints) {
+      senderSet.add(mint.sender);
+    }
+    senderSet.forEach((sender) => {
+      uniqueSenders.push(sender);
+    });
+    return uniqueSenders;
+  }
 }

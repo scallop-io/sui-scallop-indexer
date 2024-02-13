@@ -1448,6 +1448,12 @@ export class StatisticService {
       if (isSnapbatchSupplies) {
         await this.snapairdropSuppliesBetween(snapStartAt, snapEndAt);
       }
+
+      const snapMintsFlag = Number(process.env.SNAPSHOT_MINTS) || 0;
+      const isSnapbatchMints = snapMintsFlag > 0 ? true : false;
+      if (isSnapbatchMints) {
+        await this.snapairdropMintsBetween(snapStartAt, snapEndAt);
+      }
     } else {
       console.log(`[SnapAirdrop][${today.toISOString()}]: No snapshot to do.`);
     }
@@ -1977,6 +1983,87 @@ export class StatisticService {
       );
     } catch (e) {
       console.error(`Error caught while snapairdropSuppliesBetween() ${e}`);
+    }
+  }
+
+  async snapairdropMintsBetween(
+    snapStartAt = new Date(),
+    snapEndAt = new Date(),
+  ): Promise<void> {
+    try {
+      // const snapEndTSms = snapEndAt.getTime();
+      const startTime = new Date().getTime();
+
+      // get all senders page by page
+      const pageSize = Number(process.env.SNAPSHOT_PAGE_SIZE) || 1000;
+      const pageStart = Number(process.env.SNAPSHOT_PAGE_START) || 1;
+      const pageEnd = Number(process.env.SNAPSHOT_PAGE_END) || 9999;
+
+      let pageIdx = pageStart;
+      let totalMintCount = 0;
+      let pageStartTime;
+      let pageEndTime;
+      while (true) {
+        pageStartTime = new Date().getTime();
+
+        // const pageMints = await this._mintService.findSortedPage(
+        const pageMintSenders =
+          await this._mintService.findSortedUniqueSendersPage(
+            pageSize,
+            pageIdx,
+          );
+        totalMintCount += pageMintSenders.length;
+
+        // if there are no more supplies, break
+        if (pageMintSenders.length === 0) {
+          break;
+        }
+
+        let senderCount = 0;
+        let senderStartTime = new Date().getTime();
+        let senderEndTime = new Date().getTime();
+        for (const sender of pageMintSenders) {
+          senderCount += 1;
+
+          if (!(await this.isSenderSnapairdropedAt(sender, snapEndAt))) {
+            // if (!(await this.isSenderSnapairdroped(mint.sender))) {
+            senderStartTime = new Date().getTime();
+            const savedSnapshots = await this.snapairdropSenderBetween(
+              sender,
+              snapStartAt,
+              snapEndAt,
+            );
+
+            senderEndTime = new Date().getTime();
+            const senderExecTime = (senderEndTime - senderStartTime) / 1000;
+            console.log(
+              `[SnapAirdrop-Mints]: Page[${pageIdx}](${senderCount}/${pageMintSenders.length})]: ${sender} , snapshots<${savedSnapshots.length}> , <${senderExecTime}> sec.`,
+            );
+          } else {
+            console.log(
+              `[SnapAirdrop-Mints]: Page[${pageIdx}](${senderCount}/${pageMintSenders.length})]: Skip ${sender} due to already snapshoted`,
+            );
+          }
+        }
+        pageEndTime = new Date().getTime();
+        const pageExecTime = (pageEndTime - pageStartTime) / 1000;
+        console.log(
+          `[SnapAirdrop-Mints]: Page[${pageIdx}](${senderCount}/${pageMintSenders.length})]: , <${pageExecTime}> sec. `,
+        );
+
+        pageIdx += 1;
+        if (pageIdx > pageEnd) {
+          break;
+        }
+      } //end of while
+
+      const endTime = new Date().getTime();
+      const execTime = (endTime - startTime) / 1000;
+      console.log(
+        `[SnapAirdrop-Mints]: Total<${totalMintCount}>  , <${execTime}> sec.`,
+      );
+    } catch (e) {
+      console.error(`Error caught while snapairdropMintsBetween() ${e}`);
     }
   }
 }
