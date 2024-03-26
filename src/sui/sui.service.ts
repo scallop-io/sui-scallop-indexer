@@ -592,4 +592,120 @@ export class SuiService {
 
     return suiName;
   }
+
+  async getEventsFromEventStateMapByPages(
+    eventType: string,
+    eventStateMap: Map<string, EventState>,
+    createCallback: (item: any) => Promise<any>,
+    pageLimit = this.SUI_PAGE_LIMIT,
+  ): Promise<[any[], boolean]> {
+    let hasNextPage = true;
+    const eventObjects = [];
+    const eventName = eventType.split('::')[2];
+    try {
+      const startTime = new Date().getTime();
+
+      // Find if there is cursor stored in eventStateMap
+      const eventState = eventStateMap.get(eventType);
+
+      let cursorTxDigest = undefined;
+      let cursorEventSeq = undefined;
+      if (eventState !== undefined) {
+        cursorTxDigest = eventState.nextCursorTxDigest;
+        cursorEventSeq = eventState.nextCursorEventSeq;
+      }
+
+      let latestEvent: PaginatedEvents;
+      const eventData = [];
+      let pageCount = 0;
+      while (hasNextPage) {
+        if (cursorTxDigest === undefined || cursorEventSeq === undefined) {
+          latestEvent =
+            await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
+              query: {
+                MoveEventType: eventType,
+              },
+              limit: this.SUI_QUERY_LIMIT,
+              order: 'ascending',
+            });
+          console.debug(`[${eventName}]: query from <start>.`);
+        } else {
+          latestEvent =
+            await SuiService.getSuiKit().rpcProvider.provider.queryEvents({
+              query: {
+                MoveEventType: eventType,
+              },
+              cursor: {
+                txDigest: cursorTxDigest,
+                eventSeq: cursorEventSeq,
+              },
+              limit: this.SUI_QUERY_LIMIT,
+              order: 'ascending',
+            });
+          console.debug(
+            `[${eventName}]: query from cursor <${cursorTxDigest}>, seq<${cursorEventSeq}>`,
+          );
+        }
+        await this.checkRPCLimit();
+
+        for (const element of latestEvent.data) {
+          eventData.push(element);
+
+          cursorTxDigest = element.id.txDigest;
+          cursorEventSeq = element.id.eventSeq;
+        }
+
+        hasNextPage = latestEvent.hasNextPage;
+        if (hasNextPage === true) {
+          cursorTxDigest = latestEvent.nextCursor.txDigest;
+          cursorEventSeq = latestEvent.nextCursor.eventSeq;
+        }
+
+        pageCount++;
+        if (pageCount >= pageLimit) {
+          break;
+        }
+      } //end of while
+
+      // Prase data
+      for (const item of eventData) {
+        const newEvent = await createCallback(item);
+        eventObjects.push(newEvent);
+        // console.log(`[${eventName}]: create <${newEvent.obligation_id}>`);
+      }
+
+      const endTime = new Date().getTime();
+      const execTime = (endTime - startTime) / 1000;
+
+      // Check parse data number match
+      if (eventObjects.length === eventData.length) {
+        console.log(
+          `[${eventName}]: create <${eventObjects.length}> events, <${execTime}> sec.`,
+        );
+
+        // Save Next Cursor data
+        if (eventObjects.length > 0) {
+          const lastEventState: EventState = {
+            eventType: eventType,
+            nextCursorTxDigest: latestEvent.nextCursor.txDigest,
+            nextCursorEventSeq: latestEvent.nextCursor.eventSeq,
+          };
+          eventStateMap.set(eventType, lastEventState);
+        }
+      } else {
+        eventObjects.length = 0;
+        hasNextPage = true;
+        console.error(
+          `[${eventName}]: Parse <${eventObjects.length}> events didn't match, <${execTime}> sec.`,
+        );
+      }
+    } catch (err) {
+      await delay(this.RPC_DELAY_SECONDS * 1000);
+      console.error(
+        `Delay ${this.RPC_DELAY_SECONDS} sec when error caught at getEventsFromEventStateMapByPages() for ${eventName}: ${err}`,
+        err,
+      );
+    }
+    return [eventObjects, hasNextPage];
+  }
 }

@@ -22,6 +22,8 @@ export class AppService {
   private INCLUDE_FLASHLOAN = Number(process.env.INCLUDE_FLASHLOAN) || 1;
   private INCLUDE_LENDING = Number(process.env.INCLUDE_LENDING) || 0;
   private INCLUDE_STATISTICS = Number(process.env.INCLUDE_STATISTICS) || 0;
+  private INCLUDE_UPDATE_LIQ = Number(process.env.INCLUDE_UPDATE_LIQ) || 0;
+
   private OBLIGATION_PAGE_LIMIT =
     Number(process.env.OBLIGATION_PAGE_LIMIT) || 10;
 
@@ -614,11 +616,9 @@ export class AppService {
   async loopQueryEvents(): Promise<void> {
     while (true) {
       const start = new Date().getTime();
-      // SuiService.resetQueryCount();
 
       // Get & update liquidator related events
-      const uniqueObligationSenders =
-        await this.updateLiqudationRelatedEvents();
+      await this.updateLiqudationRelatedEvents();
 
       // update borrow dynamics
       const marketId = await this._suiService.getMarketId();
@@ -641,6 +641,12 @@ export class AppService {
       if (this.INCLUDE_STATISTICS !== 0) {
         // Get & update statistic & leaderboard (default 10 mins)
         await this._statisticService.updateMarketStatistic();
+      }
+
+      if (this.INCLUDE_UPDATE_LIQ !== 0) {
+        // Get & update liquidate events fields
+        await this.updateAllLiquidateEventFields();
+        await this.delay(600 * 1000); // Wait for 10 minute
       }
 
       const end = new Date().getTime();
@@ -702,5 +708,55 @@ export class AppService {
         await this.delay(snapshotIntervalMinutes * 60 * 1000);
       } //end of while
     }
+  }
+
+  async updateAllLiquidateEventFields(): Promise<void> {
+    // Get Liquidate Events from start
+    let hasNextPage = true;
+    const liquidateEventStateMap = new Map();
+
+    while (hasNextPage) {
+      const [liquieateEvents, liqHasNextPage] =
+        await this._liquidateService.getLiquidateEventsFromEventStateMap(
+          this._suiService,
+          liquidateEventStateMap,
+        );
+      hasNextPage = liqHasNextPage;
+
+      // console.debug(liquidateEventStateMap);
+      const liquidateState = liquidateEventStateMap.get(
+        await this._suiService.getLiquidateEventId(),
+      );
+      // console.debug(liquidateState);
+      console.log(
+        `[UpdateLiquidates]: get <${liquieateEvents.length}> events, next<${hasNextPage}>, tx<${liquidateState.nextCursorTxDigest}>, seq<${liquidateState.nextCursorEventSeq}>`,
+      );
+
+      // Find and Update Liquidate Events
+      let updateCount = 0;
+      for (const liquidate of liquieateEvents) {
+        const dbLiquidate =
+          await this._liquidateService.findOneByAndUpdateLiquidate(
+            liquidate.obligation_id,
+            liquidate.debtType,
+            liquidate.collateralType,
+            liquidate.liqAmount,
+            liquidate,
+          );
+        if (!dbLiquidate) {
+          console.error(
+            `[UpdateLiquidates]: not found <${liquidate.obligation_id}>`,
+          );
+        }
+        updateCount++;
+        // console.debug(
+        //   `[UpdateLiquidates]: found & updated <${dbLiquidate.obligation_id}>`,
+        // );
+        // console.debug(dbLiquidate);
+      }
+      console.log(
+        `[UpdateLiquidates]: got<${liquieateEvents.length}> & updated<${updateCount}> liquidates.`,
+      );
+    } //end of while
   }
 }

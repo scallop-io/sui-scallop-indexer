@@ -39,8 +39,67 @@ export class LiquidateService {
           repayRevenue: item.parsedJson.repay_revenue,
           liqAmount: item.parsedJson.liq_amount,
           liquidator: item.parsedJson.liquidator,
+
+          timestampMs: item.timestampMs,
+          timestampMsIsoDate: new Date(item.timestampMs * 1).toISOString(),
+          txDigest: item.id.txDigest,
+          eventSeq: item.id.eventSeq,
         };
       },
     );
+  }
+
+  async getLiquidateEventsFromEventStateMap(
+    suiService: SuiService,
+    eventStateMap: Map<string, EventState>,
+  ): Promise<[any[], boolean]> {
+    const eventId = await suiService.getLiquidateEventId();
+
+    return await suiService.getEventsFromEventStateMapByPages(
+      eventId,
+      eventStateMap,
+      async (item) => {
+        return {
+          obligation_id: item.parsedJson.obligation,
+          debtType: item.parsedJson.debt_type.name,
+          collateralType: item.parsedJson.collateral_type.name,
+          repayOnBehalf: item.parsedJson.repay_on_behalf,
+          repayRevenue: item.parsedJson.repay_revenue,
+          liqAmount: item.parsedJson.liq_amount,
+          liquidator: item.parsedJson.liquidator,
+
+          timestampMs: item.timestampMs,
+          timestampMsIsoDate: new Date(item.timestampMs * 1).toISOString(),
+          txDigest: item.id.txDigest,
+          eventSeq: item.id.eventSeq,
+        };
+      },
+    );
+  }
+
+  async findOneByAndUpdateLiquidate(
+    id: string,
+    debtType: string,
+    collateralType: string,
+    liqAmount: string,
+    liquidate: Liquidate,
+    session: mongoose.ClientSession | null = null,
+  ): Promise<LiquidateDocument> {
+    return this.liquidateModel
+      .findOneAndUpdate(
+        {
+          obligation_id: id,
+          debtType: debtType,
+          collateralType: collateralType,
+          liqAmount: liqAmount,
+        },
+        liquidate,
+        {
+          upsert: true,
+          new: true,
+        },
+      )
+      .session(session)
+      .exec();
   }
 }

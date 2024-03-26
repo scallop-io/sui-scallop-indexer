@@ -40,6 +40,18 @@ export class Liquidate {
   @Prop({ type: Types.ObjectId, ref: 'Obligation' })
   obligation?: Obligation;
 
+  @Prop()
+  timestampMs?: string;
+
+  @Prop()
+  timestampMsIsoDate?: string;
+
+  @Prop()
+  txDigest?: string;
+
+  @Prop()
+  eventSeq?: string;
+
   // @Prop({ default: now().toString() })
   // createdAt?: string;
 
