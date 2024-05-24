@@ -23,6 +23,9 @@ export class Borrow {
   amount?: string;
 
   @Prop()
+  borrowFee?: string;
+
+  @Prop()
   timestampMs?: string;
 
   @Prop({ index: true, sparse: true })

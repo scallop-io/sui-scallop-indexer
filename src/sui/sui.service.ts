@@ -36,6 +36,7 @@ export class SuiService {
   private _collateralDepositEventId = undefined;
   private _collateralWithdrawEventId = undefined;
   private _borrowEventId = undefined;
+  private _borrowEventV2Id = undefined;
   private _repayEventId = undefined;
   private _liquidateEventId = undefined;
   private _flashloanBorrowEventId = undefined;
@@ -145,6 +146,18 @@ export class SuiService {
       this._borrowEventId = `${protocol}::borrow::BorrowEvent`;
     }
     return this._borrowEventId;
+  }
+
+  public async getBorrowEventV2Id() {
+    if (!this._borrowEventV2Id) {
+      // const protocol = await this.getProtocolId();
+      // this._borrowEventV2Id = `${protocol}::borrow::BorrowEventV2`;
+
+      // Get BorrowEventV2 from this intermedia protocol id due to contract upgrade twice
+      this._borrowEventV2Id =
+        '0xc38f849e81cfe46d4e4320f508ea7dda42934a329d5a6571bb4c3cb6ea63f5da::borrow::BorrowEventV2';
+    }
+    return this._borrowEventV2Id;
   }
 
   public async getRepayEventId() {
@@ -509,21 +522,25 @@ export class SuiService {
           Math.min(this.SUI_QUERY_LIMIT, keys.length),
         );
 
-        const obligationObjs = await SuiService.getSuiKit().getObjects(
-          currentBatchOfKeys,
-        );
+        const obligationObjs = await SuiService.getSuiKit().rpcProvider.provider.multiGetObjects({
+          ids: currentBatchOfKeys,
+          options: {
+            showContent: true,
+            showOwner: true,
+          },
+        });
         await this.checkRPCLimit();
         for (const obj of obligationObjs) {
-          if (obligationsMap.has(obj.objectId)) {
+          if (obligationsMap.has(obj.data.objectId)) {
             // set obligation version
-            obligationsMap.get(obj.objectId).version =
-              obj.objectVersion.toString();
+            obligationsMap.get(obj.data.objectId).version =
+              obj.data.owner['Shared'].initial_shared_version.toString();
             // set collaterals parent id
-            obligationsMap.get(obj.objectId).collaterals_parent_id =
-              obj.objectFields['collaterals'].fields.table.fields.id.id;
+            obligationsMap.get(obj.data.objectId).collaterals_parent_id =
+              obj.data.content['fields'].collaterals.fields.table.fields.id.id;
             // set debts parent id
-            obligationsMap.get(obj.objectId).debts_parent_id =
-              obj.objectFields['debts'].fields.table.fields.id.id;
+            obligationsMap.get(obj.data.objectId).debts_parent_id =
+              obj.data.content['fields'].debts.fields.table.fields.id.id;
           }
         }
       } //end while
