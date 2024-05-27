@@ -26,6 +26,15 @@ export class Borrow {
   borrowFee?: string;
 
   @Prop()
+  borrowFeeDiscount?: number;
+
+  @Prop()
+  borrowReferrallFee?: string;
+
+  @Prop()
+  time?: string;
+
+  @Prop()
   timestampMs?: string;
 
   @Prop({ index: true, sparse: true })

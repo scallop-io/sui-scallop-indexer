@@ -37,6 +37,8 @@ export class SuiService {
   private _collateralWithdrawEventId = undefined;
   private _borrowEventId = undefined;
   private _borrowEventV2Id = undefined;
+  private _borrowEventV3Id =
+    '0x6e641f0dca8aedab3101d047e96439178f16301bf0b57fe8745086ff1195eb3e::borrow::BorrowEventV3';
   private _repayEventId = undefined;
   private _liquidateEventId = undefined;
   private _flashloanBorrowEventId = undefined;
@@ -158,6 +160,10 @@ export class SuiService {
         '0xc38f849e81cfe46d4e4320f508ea7dda42934a329d5a6571bb4c3cb6ea63f5da::borrow::BorrowEventV2';
     }
     return this._borrowEventV2Id;
+  }
+
+  public getBorrowEventV3Id() {
+    return this._borrowEventV3Id;
   }
 
   public async getRepayEventId() {
@@ -522,13 +528,14 @@ export class SuiService {
           Math.min(this.SUI_QUERY_LIMIT, keys.length),
         );
 
-        const obligationObjs = await SuiService.getSuiKit().rpcProvider.provider.multiGetObjects({
-          ids: currentBatchOfKeys,
-          options: {
-            showContent: true,
-            showOwner: true,
-          },
-        });
+        const obligationObjs =
+          await SuiService.getSuiKit().rpcProvider.provider.multiGetObjects({
+            ids: currentBatchOfKeys,
+            options: {
+              showContent: true,
+              showOwner: true,
+            },
+          });
         await this.checkRPCLimit();
         for (const obj of obligationObjs) {
           if (obligationsMap.has(obj.data.objectId)) {

@@ -184,7 +184,11 @@ export class AppService {
         this._suiService,
         changedEventStateMap,
       );
-      borrows.push(...borrowsV2);
+      const borrowsV3 = await this._borrowService.getBorrowsV3FromQueryEvent(
+        this._suiService,
+        changedEventStateMap,
+      );
+      borrows.push(...borrowsV2, ...borrowsV3);
 
       if (borrows.length > 0) {
         hasDebtsChanged = true;

@@ -5,6 +5,7 @@ import { Borrow, BorrowDocument } from './borrow.schema';
 import { SuiService } from 'src/sui/sui.service';
 import { EventState } from 'src/eventstate/eventstate.schema';
 import * as mongoose from 'mongoose';
+import { BorrowTypeV3 } from 'src/types/common';
 
 @Injectable()
 export class BorrowService {
@@ -57,6 +58,29 @@ export class BorrowService {
           borrowFee: item.parsedJson.borrow_fee,
           timestampMs: item.timestampMs,
         };
+      },
+    );
+  }
+
+  async getBorrowsV3FromQueryEvent(
+    suiService: SuiService,
+    eventStateMap: Map<string, EventState>,
+  ): Promise<any[]> {
+    const eventId = suiService.getBorrowEventV3Id();
+    return await suiService.getEventsFromQuery(
+      eventId,
+      eventStateMap,
+      async (item) => {
+        return {
+          obligation_id: item.parsedJson.obligation,
+          asset: item.parsedJson.asset.name,
+          amount: item.parsedJson.amount,
+          borrowFee: item.parsedJson.borrow_fee,
+          timestampMs: item.timestampMs,
+          borrowFeeDiscount: item.parsedJson.borrow_fee_discount,
+          borrowReferrallFee: item.parsedJson.borrow_referral_fee,
+          time: item.parsedJson.time,
+        } as BorrowTypeV3;
       },
     );
   }
